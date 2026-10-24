@@ -1,14 +1,14 @@
 import { getUser, isAdmin, readUsers } from "@/lib/auth";
 import { listJobs } from "@/lib/jobs";
 import { getStats } from "@/lib/links";
-import { readLimitHits } from "@/lib/limits";
+import { readLimitHits, readProWaitlist } from "@/lib/limits";
 
 // The users proof: everyone who signed in, what they ran, and the clicks it brought them.
 export async function GET(request: Request) {
   const user = await getUser(request);
   if (!isAdmin(user)) return Response.json({ error: "Admins only" }, { status: 403 });
 
-  const [users, jobs, hits] = await Promise.all([readUsers(), listJobs(), readLimitHits()]);
+  const [users, jobs, hits, pro] = await Promise.all([readUsers(), listJobs(), readLimitHits(), readProWaitlist()]);
   const clicks = new Map(await Promise.all(jobs.map(async (j) => [j.id, (await getStats(j.id)).totalClicks] as const)));
 
   const rows = Object.values(users)
@@ -32,7 +32,9 @@ export async function GET(request: Request) {
       gotClicks: rows.filter((r) => r.clicks > 0).length,
       // Wanted another run after the limit: demand proof.
       wantedMore: hits.length,
-      wantedMoreEmails: hits.map((h) => `${h.email} (${h.reason === "used" ? "used their free runs" : "day was full"})`),
+      wantedMoreEmails: hits.map((h) => h.email),
+      proWaitlist: pro.length,
+      proWaitlistEmails: pro.map((p) => p.email),
       rows,
     },
     { headers: { "Cache-Control": "no-store" } },

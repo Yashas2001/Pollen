@@ -9,7 +9,7 @@ export async function POST(request: Request) {
   return Response.json(user);
 }
 
-// Free runs left (null = no limit) and whether today is full, shown before they start.
+// Free runs left (null = no limit) and Pro waitlist status, shown before they start.
 export async function GET(request: Request) {
   const user = await getUser(request);
   if (!user) return Response.json({ error: "Sign in first" }, { status: 401 });
