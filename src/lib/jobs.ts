@@ -1,4 +1,4 @@
-import { mkdir, readFile, readdir, writeFile, rename } from "node:fs/promises";
+import { mkdir, readFile, readdir, writeFile, rename, rm } from "node:fs/promises";
 import { randomUUID } from "node:crypto";
 import path from "node:path";
 import type { VideoProps } from "@/remotion/schema";
@@ -15,7 +15,7 @@ export type JobStep = "queued" | "reading_site" | "researching" | "writing" | "v
 
 export type JobVideo = {
   props: VideoProps;
-  render: { status: "none" | "rendering" | "done" | "failed"; file?: string; error?: string };
+  render: { status: "none" | "rendering" | "done" | "failed"; file?: string; error?: string; progress?: number }; // progress: 0-100, only while rendering
 };
 
 export type Job = {
@@ -59,7 +59,21 @@ export async function saveJob(job: Job) {
   const file = path.join(jobDir(job.id), "job.json");
   const tmp = `${file}.${randomUUID().slice(0, 6)}.tmp`;
   await writeFile(tmp, JSON.stringify(job, null, 2));
-  await rename(tmp, file);
+  // Windows refuses to replace job.json while another request is reading it (EPERM/EBUSY),
+  // and the page reads it every 1.5 s. Retry for up to ~1 s instead of dropping the update.
+  for (let attempt = 0; ; attempt++) {
+    try {
+      await rename(tmp, file);
+      return;
+    } catch (e) {
+      const code = (e as NodeJS.ErrnoException).code;
+      if (attempt >= 9 || (code !== "EPERM" && code !== "EBUSY" && code !== "EACCES")) {
+        await rm(tmp, { force: true });
+        throw e;
+      }
+      await new Promise((r) => setTimeout(r, 20 * (attempt + 1)));
+    }
+  }
 }
 
 // Several parts of a job update it at once (research, people finder, renders), so
@@ -80,6 +94,11 @@ export function updateJob(id: string, change: (job: Job) => void): Promise<Job> 
   void run.finally(() => queues.get(id) === run && queues.delete(id)).catch(() => {});
   return run;
 }
+
+// Renders ("<id>/<index>" -> percent done) queued or running in this server; kept in memory so
+// progress never touches job.json. job.json saying "rendering" for one that isn't here means a
+// restart cut it off. On globalThis because Next can load this module once per route.
+export const activeRenders: Map<string, number> = ((globalThis as { __activeRenders?: Map<string, number> }).__activeRenders ??= new Map());
 
 // Every job, newest first. Fine for an event's worth of jobs; a DB later.
 export async function listJobs(): Promise<Job[]> {

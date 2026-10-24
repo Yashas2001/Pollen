@@ -1,5 +1,8 @@
 import React from "react";
-import { AbsoluteFill, Audio, Sequence, staticFile, useCurrentFrame } from "remotion";
+// Audio from @remotion/media works in the Player, the server renderer and the in-browser
+// renderer (the Download button); remotion's <Audio> is not supported by the in-browser one.
+import { Audio } from "@remotion/media";
+import { AbsoluteFill, Sequence, staticFile, useCurrentFrame } from "remotion";
 import type { VideoProps } from "./schema";
 import { END_CARD_MS, FPS } from "./schema";
 import { SCORE_FILE } from "./score";

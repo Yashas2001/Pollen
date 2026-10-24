@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { Player, Thumbnail } from "@remotion/player";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { SocialVideo, totalFrames } from "@/remotion/SocialVideo";
 import { FPS, HEIGHT, WIDTH } from "@/remotion/schema";
 import type { Job, JobVideo } from "@/lib/jobs";
@@ -384,13 +384,51 @@ function VideoPair({
   const [copied, setCopied] = useState(false);
   const caption = `${props.script.postCaption}\n\n${props.script.hashtags.map((h) => `#${h}`).join(" ")}`;
 
+  // Clicked Download: start the file as soon as the MP4 is ready, no second click.
+  const wanted = useRef(false);
+  const fileUrl = render.status === "done" && render.file ? `/api/files/${jobId}/${render.file}?download` : null;
+  useEffect(() => {
+    if (!wanted.current || !fileUrl) return;
+    wanted.current = false;
+    window.location.assign(fileUrl); // an attachment response downloads without leaving the page
+  }, [fileUrl]);
+
   async function startRender() {
+    wanted.current = true;
     await fetch(`/api/jobs/${jobId}/render`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ index }),
     });
     onRender();
+  }
+
+  // The MP4 is made in this browser (WebCodecs), from the same component and props as the
+  // preview, so the 1-CPU server does no rendering. Browsers that can't fall back to the server.
+  const [making, setMaking] = useState<number | null>(null); // percent, while making it here
+  async function download() {
+    setMaking(0);
+    try {
+      const { canRenderMediaOnWeb, renderMediaOnWeb } = await import("@remotion/web-renderer");
+      if ((await canRenderMediaOnWeb({ container: "mp4", width: WIDTH, height: HEIGHT })).canRender) {
+        const { getBlob } = await renderMediaOnWeb({
+          composition: { component: SocialVideo, id: "SocialVideo", width: WIDTH, height: HEIGHT, fps: FPS, durationInFrames: totalFrames(props), defaultProps: props },
+          inputProps: props,
+          container: "mp4",
+          onProgress: ({ progress }) => setMaking(Math.round(progress * 100)),
+        });
+        const url = URL.createObjectURL(await getBlob());
+        const a = Object.assign(document.createElement("a"), { href: url, download: `${domain}-video-${index + 1}.mp4` });
+        a.click();
+        setTimeout(() => URL.revokeObjectURL(url), 60_000);
+        setMaking(null);
+        return;
+      }
+    } catch (e) {
+      console.warn("[download] browser render failed, using the server", e);
+    }
+    setMaking(null);
+    await startRender();
   }
 
   const yours = props.script.shots[0]?.onScreenText;
@@ -485,17 +523,23 @@ function VideoPair({
           <p className="mt-2 whitespace-pre-line rounded-2xl bg-black/5 p-4 text-sm">{caption}</p>
         </div>
         <div className="flex flex-col gap-3 md:pt-6">
-          {render.status === "done" && render.file ? (
-            <a href={`/api/files/${jobId}/${render.file}?download`} className="rounded-2xl bg-black px-5 py-3 text-center font-semibold text-white">
+          {fileUrl ? (
+            <a href={fileUrl} className="rounded-2xl bg-black px-5 py-3 text-center font-semibold text-white">
               Download video
             </a>
           ) : (
             <button
-              onClick={startRender}
-              disabled={render.status === "rendering"}
+              onClick={download}
+              disabled={making !== null || render.status === "rendering"}
               className="rounded-2xl bg-black px-5 py-3 font-semibold text-white disabled:opacity-50"
             >
-              {render.status === "rendering" ? "Making your MP4..." : render.status === "failed" ? "Try download again" : "Download video"}
+              {making !== null
+                ? `Making your MP4... ${making}%`
+                : render.status === "rendering"
+                  ? `Making your MP4... ${render.progress ?? 0}%`
+                  : render.status === "failed"
+                    ? "Try download again"
+                    : "Download video"}
             </button>
           )}
           <button

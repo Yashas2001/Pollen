@@ -1,5 +1,6 @@
 import React from "react";
-import { OffthreadVideo } from "remotion";
+// Video from @remotion/media, not remotion's OffthreadVideo: the in-browser renderer (Download) only supports this one.
+import { Video } from "@remotion/media";
 import type { Asset } from "../schema";
 import { FPS, HEIGHT as H, WIDTH as W } from "../schema";
 import type { Theme } from "../theme";
@@ -31,7 +32,7 @@ export const FootageScene: React.FC<{ f: number; dur: number; asset: Asset; clip
     const s = lerp(1.14, 1, hit) * lerp(1, 1.07, push);
     return (
       <Abs style={{ opacity: 1 - out * 0.4 }}>
-        <OffthreadVideo src={asset.url} muted trimBefore={from} playbackRate={rate} style={{ width: W, height: H, objectFit: "cover", transform: `scale(${s})` }} />
+        <Video src={asset.url} muted trimBefore={from} playbackRate={rate} style={{ width: W, height: H, objectFit: "cover", transform: `scale(${s})` }} />
       </Abs>
     );
   }
@@ -56,7 +57,7 @@ export const FootageScene: React.FC<{ f: number; dur: number; asset: Asset; clip
           boxShadow: `0 40px 120px rgba(0,0,0,0.8), 0 0 80px ${theme.accent.main}55`,
         }}
       >
-        <OffthreadVideo src={asset.url} muted trimBefore={from} playbackRate={rate} style={{ width: W, height: h, objectFit: "cover", display: "block" }} />
+        <Video src={asset.url} muted trimBefore={from} playbackRate={rate} style={{ width: W, height: h, objectFit: "cover", display: "block" }} />
       </div>
     </Abs>
   );
@@ -70,7 +71,7 @@ export const TalkScene: React.FC<{ f: number; dur: number; asset: Asset; clipSta
   const s = (close ? 1.16 : 1) * lerp(1, 1.04, prog(f, 0, dur));
   return (
     <Abs>
-      <OffthreadVideo
+      <Video
         src={asset.url}
         muted
         trimBefore={from}
