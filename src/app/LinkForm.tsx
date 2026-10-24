@@ -7,6 +7,8 @@ import { authFetch } from "@/lib/firebase";
 const GOALS = ["My first 50 users", "First 10 paying customers", "More signups", "Waitlist sign-ups", "More sales"];
 const MAX_FILES = 10;
 
+type Allowance = { left: number | null; freeRuns: number; onWaitlist: boolean };
+
 // One question at a time: link -> what they need -> clips (optional) -> go.
 export function LinkForm() {
   const router = useRouter();
@@ -18,8 +20,8 @@ export function LinkForm() {
   const [error, setError] = useState<string | null>(null);
   const urlBox = useRef<HTMLInputElement>(null);
   const goalBox = useRef<HTMLInputElement>(null);
-  // Free runs left (null = no limit) and today's cap, so nobody fills all three steps for nothing.
-  const [allowance, setAllowance] = useState<{ left: number | null; full: boolean; message: string | null } | null>(null);
+  // Free runs left (null = no limit), so nobody fills all three steps for nothing.
+  const [allowance, setAllowance] = useState<Allowance | null>(null);
 
   useEffect(() => {
     authFetch("/api/me")
@@ -57,11 +59,11 @@ export function LinkForm() {
     const res = await authFetch("/api/jobs", { method: "POST", body }).catch(() => null);
     const data = res ? ((await res.json().catch(() => ({}))) as { id?: string; error?: string }) : {};
     if (res?.status === 429) {
-      // Hit a limit while they were filling it in: show the same screen as on arrival.
-      const fresh = await authFetch("/api/me")
+      // Used their last run in another tab meanwhile: show the same screen as on arrival.
+      const fresh = (await authFetch("/api/me")
         .then((r) => (r.ok ? r.json() : null))
-        .catch(() => null);
-      if (fresh?.message) {
+        .catch(() => null)) as Allowance | null;
+      if (fresh?.left === 0) {
         setAllowance(fresh);
         setBusy(false);
         return;
@@ -75,13 +77,7 @@ export function LinkForm() {
     router.push(`/v/${data.id}`);
   }
 
-  if (allowance?.message)
-    return (
-      <div className="flex w-full max-w-xl flex-col gap-3">
-        <h1 className="text-3xl font-bold tracking-tight sm:text-4xl">{allowance.left === 0 ? "You've used your free runs" : "Pollen is full for today"}</h1>
-        <p className="text-lg text-black/60">{allowance.message}</p>
-      </div>
-    );
+  if (allowance?.left === 0) return <ProWaitlist allowance={allowance} />;
 
   return (
     <div className="flex w-full max-w-xl flex-col gap-5">
@@ -119,6 +115,9 @@ export function LinkForm() {
             className="h-14 rounded-2xl border border-black/10 bg-white px-5 text-lg text-black outline-none focus:border-black/40"
           />
           <p className="-mt-2 text-sm text-black/40">e.g. cal.com · linear.app · notion.so</p>
+          {allowance?.left ? (
+            <p className="-mt-2 text-sm text-black/40">{allowance.left === 1 ? "1 free run left." : `${allowance.left} free runs left.`}</p>
+          ) : null}
           <button type="submit" className="h-14 rounded-2xl bg-black text-lg font-semibold text-white">
             Next
           </button>
@@ -214,6 +213,49 @@ export function LinkForm() {
       ) : null}
 
       {error ? <p className="text-red-600">{error}</p> : null}
+    </div>
+  );
+}
+
+// Out of free runs: Pro is coming, and joining the waitlist is our demand proof.
+function ProWaitlist({ allowance }: { allowance: Allowance }) {
+  const [joined, setJoined] = useState(allowance.onWaitlist);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function join() {
+    setBusy(true);
+    setError(null);
+    const res = await authFetch("/api/me/pro", { method: "POST" }).catch(() => null);
+    if (res?.ok) setJoined(true);
+    else setError("That didn't go through. Try again.");
+    setBusy(false);
+  }
+
+  return (
+    <div className="flex w-full max-w-xl flex-col gap-4">
+      <div>
+        <h1 className="text-3xl font-bold tracking-tight sm:text-4xl">You&apos;ve used your {allowance.freeRuns} free runs</h1>
+        <p className="mt-2 text-lg text-black/60">
+          Pollen Pro is coming soon: more products, and fresh videos and people to reach every week.
+        </p>
+      </div>
+      {joined ? (
+        <p className="flex h-14 items-center justify-center rounded-2xl bg-white text-lg font-semibold text-black">
+          You&apos;re on the list. We&apos;ll email you when Pro opens.
+        </p>
+      ) : (
+        <button
+          type="button"
+          onClick={() => void join()}
+          disabled={busy}
+          className="h-14 rounded-2xl bg-black text-lg font-semibold text-white disabled:opacity-60"
+        >
+          {busy ? "Joining..." : "Join the Pro waitlist"}
+        </button>
+      )}
+      {error ? <p className="text-red-600">{error}</p> : null}
+      <p className="text-sm text-black/45">Your products below are still yours to open and use.</p>
     </div>
   );
 }

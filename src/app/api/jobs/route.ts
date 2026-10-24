@@ -46,9 +46,9 @@ export async function POST(request: Request) {
 
   const job = await withRunLock(async () => {
     const allowed = await runAllowance(user);
-    if (allowed.message) {
-      void recordLimitHit(user, allowed.left === 0 ? "used" : "full").catch(() => {});
-      return allowed.message;
+    if (allowed.left === 0) {
+      void recordLimitHit(user).catch(() => {});
+      return `You've used your ${allowed.freeRuns} free runs. Pollen Pro is coming soon.`;
     }
     return createJob(url, goal?.trim().slice(0, 200) || "I need my first 50 users", {
       uid: user.uid,

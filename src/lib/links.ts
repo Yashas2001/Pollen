@@ -86,10 +86,13 @@ export const linkUrl = (code: string) => `${process.env.APP_URL}/${code.includes
 // Link previews (X, WhatsApp, Slack, LinkedIn...) and crawlers still get redirected, just not counted.
 const BOTS = /bot|crawl|spider|preview|facebookexternalhit|Twitterbot|Slackbot|LinkedInBot|WhatsApp|TelegramBot|Discordbot|SkypeUriPreview|Googlebot|bingbot/i;
 
+// Behind Render's proxy request.url is the internal address (localhost:10000), so go home via APP_URL.
+const home = (request: Request) => new URL("/", process.env.APP_URL || request.url);
+
 // A tracked link was opened: log the click, then send them to the product with UTM tags.
 export async function followLink(request: Request, code: string): Promise<Response> {
   const link = await getLink(code).catch(() => null);
-  if (!link) return Response.redirect(new URL("/", request.url), 302);
+  if (!link) return Response.redirect(home(request), 302);
 
   const ua = request.headers.get("user-agent");
   if (!ua || !BOTS.test(ua)) {
@@ -106,7 +109,7 @@ export async function followLink(request: Request, code: string): Promise<Respon
   try {
     target = new URL(link.target);
   } catch {
-    return Response.redirect(new URL("/", request.url), 302);
+    return Response.redirect(home(request), 302);
   }
   target.searchParams.set("utm_source", "pollen");
   target.searchParams.set("utm_medium", link.channel);
