@@ -1,6 +1,6 @@
 # Fix needed in `src/lib/jobs.ts` (for Suhas)
 
-From Yashas. `jobs.ts` is your file, so this branch doesn't change it. Please apply this before or during the merge.
+From Yashas. `jobs.ts` is your file. The fix below is committed on `people` as its own commit ("jobs: one update at a time per job...") so you can see the diff with `git show 3946860`. Review it before merging, or drop that commit and apply your own version.
 
 ## The bug
 
