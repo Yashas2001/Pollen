@@ -85,22 +85,44 @@ function google(query: string, tbs: "qdr:w" | "qdr:m"): Promise<Hit[]> {
   return hits;
 }
 
+// Several Bright Data keys, comma separated in BRIGHTDATA_API_KEY (like ELEVENLABS_API_KEYS).
+// A key refused for its own sake (bad key, no balance, zone missing or off) is benched for an
+// hour and the search moves on to the next key. An IP denylist or a captcha is not the key's
+// fault, so those don't bench it.
+const KEYS = (process.env.BRIGHTDATA_API_KEY ?? "").split(",").map((k) => k.trim()).filter(Boolean);
+const KEY_BENCH_MS = 60 * 60_000;
+const benchedUntil: Map<string, number> = ((globalThis as { __brdBenched?: Map<string, number> }).__brdBenched ??= new Map());
+
+function keyRefused(res: Response): boolean {
+  const err = `${res.headers.get("x-brd-error") ?? ""} ${res.headers.get("x-brd-err-msg") ?? ""}`;
+  if (/ip_blacklisted|captcha|recently failed/i.test(err)) return false;
+  const status = Number(res.headers.get("x-brd-status-code") ?? res.status);
+  return [401, 402, 403].includes(status) || /auth|balance|credit|zone|inactive|disabled|suspend/i.test(err);
+}
+
 async function search(query: string, tbs: "qdr:w" | "qdr:m"): Promise<Hit[]> {
   if (Date.now() < pausedUntil) throw new Error("bright data: paused after a Google captcha");
+  const keys = KEYS.filter((k) => (benchedUntil.get(k) ?? 0) < Date.now());
+  if (!keys.length) throw new Error(KEYS.length ? "bright data: every key was refused, retrying them within the hour" : "bright data: no BRIGHTDATA_API_KEY");
   const url = `https://www.google.com/search?q=${encodeURIComponent(query)}&tbs=${tbs}&brd_json=1&num=25`;
-  const deadline = AbortSignal.timeout(45_000); // hard cut-off for all attempts; googleAll keeps what arrived
+  const deadline = AbortSignal.timeout(45_000); // hard cut-off for all attempts and keys; googleAll keeps what arrived
   let res: Response | undefined;
-  // Bright Data answers 200 with an empty body and an x-brd-error header when it refuses a request.
-  // An IP-denylist refusal is fast and the venue network rotates IPs, so that one is retried (3 tries);
-  // a captcha or "recently failed" is not.
-  for (let attempt = 0; attempt < 3; attempt++) {
-    res = await fetch("https://api.brightdata.com/request", {
-      method: "POST",
-      headers: { Authorization: `Bearer ${process.env.BRIGHTDATA_API_KEY}`, "Content-Type": "application/json" },
-      body: JSON.stringify({ zone: process.env.BRIGHTDATA_SERP_ZONE ?? "viskara_serp", url, format: "raw" }),
-      signal: deadline,
-    });
-    if (!/ip_blacklisted/.test(res.headers.get("x-brd-error") ?? "")) break;
+  for (const key of keys) {
+    // Bright Data answers 200 with an empty body and an x-brd-error header when it refuses a request.
+    // An IP-denylist refusal is fast and the venue network rotates IPs, so that one is retried (3 tries);
+    // a captcha or "recently failed" is not.
+    for (let attempt = 0; attempt < 3; attempt++) {
+      res = await fetch("https://api.brightdata.com/request", {
+        method: "POST",
+        headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json" },
+        body: JSON.stringify({ zone: process.env.BRIGHTDATA_SERP_ZONE ?? "viskara_serp", url, format: "raw" }),
+        signal: deadline,
+      });
+      if (!/ip_blacklisted/.test(res.headers.get("x-brd-error") ?? "")) break;
+    }
+    if (!res || !keyRefused(res)) break;
+    benchedUntil.set(key, Date.now() + KEY_BENCH_MS);
+    console.warn(`[people] bright data key ${KEYS.indexOf(key) + 1} refused (${res.headers.get("x-brd-err-msg") ?? res.headers.get("x-brd-error") ?? res.status}), trying the next key`);
   }
   const refusal = `${res?.headers.get("x-brd-err-msg") ?? ""} ${res?.headers.get("x-brd-error") ?? ""}`;
   if (/captcha/i.test(refusal)) pausedUntil = Date.now() + PAUSE_MS;
