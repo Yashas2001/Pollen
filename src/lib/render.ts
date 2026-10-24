@@ -1,7 +1,7 @@
 import { renderMedia, selectComposition } from "@remotion/renderer";
 import path from "node:path";
 import type { VideoProps } from "@/remotion/schema";
-import { jobDir, updateJob, getJob } from "./jobs";
+import { activeRenders, jobDir, updateJob, getJob } from "./jobs";
 
 // Prebuilt by `npm run bundle` (runs before dev/build). Remotion's bundler uses
 // webpack, so it must not run inside a Next route.
@@ -29,6 +29,8 @@ function absolutize(props: VideoProps): VideoProps {
 let queue: Promise<unknown> = Promise.resolve();
 
 export function renderVideo(id: string, index: number): Promise<void> {
+  const key = `${id}/${index}`;
+  activeRenders.add(key);
   const run = async () => {
     const job = await getJob(id);
     const video = job?.videos[index];
@@ -53,7 +55,7 @@ export function renderVideo(id: string, index: number): Promise<void> {
       await updateJob(id, (j) => void (j.videos[index].render = { status: "failed", error }));
     }
   };
-  const next = queue.then(run, run);
+  const next = queue.then(run, run).finally(() => activeRenders.delete(key));
   queue = next.catch(() => {});
   return next;
 }
