@@ -21,7 +21,8 @@ async function ask(p: Person, product: string): Promise<Verdict | null> {
         post: p.text,
         draft: p.reply,
         product,
-        link: p.reply.match(/https?:\/\/\S+/)?.[0] ?? "",
+        // Drafts often wrap the link: "Cubix (https://cubix.design)." -> stop before ) , . etc.
+        link: p.reply.match(/https?:\/\/[^\s)\]>,"']+/)?.[0]?.replace(/[.!?;:]+$/, "") ?? "",
       },
     }),
     signal: AbortSignal.timeout(15_000),
