@@ -53,14 +53,23 @@ export async function getJob(id: string): Promise<Job | null> {
 
 export async function saveJob(job: Job) {
   const file = path.join(jobDir(job.id), "job.json");
-  await writeFile(`${file}.tmp`, JSON.stringify(job, null, 2));
-  await rename(`${file}.tmp`, file);
+  const tmp = `${file}.${randomUUID()}.tmp`;
+  await writeFile(tmp, JSON.stringify(job, null, 2));
+  await rename(tmp, file);
 }
 
-export async function updateJob(id: string, change: (job: Job) => void): Promise<Job> {
-  const job = await getJob(id);
-  if (!job) throw new Error(`Job ${id} not found`);
-  change(job);
-  await saveJob(job);
-  return job;
+// One update at a time per job: the people finder updates the job while the pipeline does,
+// and two overlapping read-change-write cycles would overwrite each other.
+const queues = new Map<string, Promise<unknown>>();
+
+export function updateJob(id: string, change: (job: Job) => void): Promise<Job> {
+  const run = (queues.get(id) ?? Promise.resolve()).then(async () => {
+    const job = await getJob(id);
+    if (!job) throw new Error(`Job ${id} not found`);
+    change(job);
+    await saveJob(job);
+    return job;
+  });
+  queues.set(id, run.catch(() => {}));
+  return run;
 }
