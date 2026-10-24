@@ -13,7 +13,8 @@ const REMOTION_PORT = 3123;
 // Headless Chrome loads the job files over HTTP, so relative /api/files/... paths
 // become absolute against the app's own URL.
 function absolutize(props: VideoProps): VideoProps {
-  const base = process.env.APP_URL ?? "http://localhost:3000";
+  // The renderer fetches job files from this same server, not through the public address.
+  const base = `http://localhost:${process.env.PORT ?? 3000}`;
   const abs = (u: string | null) => (u && u.startsWith("/") ? `${base}${u}` : u);
   return {
     ...props,
