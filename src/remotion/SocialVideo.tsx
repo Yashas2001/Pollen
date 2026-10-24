@@ -41,15 +41,19 @@ export const SocialVideo: React.FC<VideoProps> = (props) => {
   const theme = themeFor(script.theme ?? "dark", props.brand.primary);
   const accent = theme.accent;
   // Light look: the product itself, huge and blurred, is the backdrop (CapCut-style).
-  const backdrop = props.assets.find((a) => a.kind === "image") ?? props.assets[0] ?? null;
-  const endFrom = snapToKicks([...props.shotStartsMs.map(msToFrames), msToFrames(durationMs)]);
+  const backdrop = props.assets.find((a) => a.kind === "image") ?? props.assets.find((a) => a.kind === "screenshot_hero") ?? null;
+  // Cuts snap to the music, except when the voice is their own clip: then the cuts
+  // must stay exactly on the phrases or their lips drift off the words.
+  const rawCuts = [...props.shotStartsMs.map(msToFrames), msToFrames(durationMs)];
+  const endFrom = script.voice === "clip" ? rawCuts : snapToKicks(rawCuts);
   const starts = endFrom.slice(0, script.shots.length);
   const endCardFrom = endFrom[endFrom.length - 1];
 
   // The stage breathes with the kick; every cut flashes the brand colour.
   const kick = f < endCardFrom ? kickEnv(f, 5) : 0;
   const shake = f < starts[1] ? kickEnv(f, 4) * 10 : kickEnv(f, 4) * 3;
-  const lastAsset = [...script.shots].reverse().find((s) => s.assetIndex >= 0 && props.assets[s.assetIndex]);
+  const still = (i: number) => ["image", "screenshot_full", "screenshot_hero"].includes(props.assets[i]?.kind ?? "");
+  const lastAsset = [...script.shots].reverse().find((s) => s.assetIndex >= 0 && still(s.assetIndex));
 
   return (
     <AbsoluteFill style={{ background: theme.bg, overflow: "hidden" }}>
@@ -89,6 +93,7 @@ export const SocialVideo: React.FC<VideoProps> = (props) => {
                 assets={props.assets}
                 elements={props.elements ?? []}
                 logoUrl={props.logoUrl}
+                clipMode={script.voice === "clip"}
               />
             </Sequence>
           );
@@ -112,14 +117,14 @@ export const SocialVideo: React.FC<VideoProps> = (props) => {
       </Sequence>
 
       <Flash v={hitEnv(f, [0], 6) * 0.5 + hitEnv(f, starts.slice(1), 4) * 0.16 + hitEnv(f, [endCardFrom], 5) * 0.3} color={accent.main} />
-      <Vignette o={theme.dark ? 0.6 : 0.18} />
+      <Vignette o={script.voice === "clip" ? 0.22 : theme.dark ? 0.6 : 0.18} />
       <Grain f={f} o={theme.dark ? 0.05 : 0.03} />
 
       {props.voiceUrl ? <Audio src={props.voiceUrl} /> : null}
       <Audio
         src={props.musicUrl ?? staticFile(SCORE_FILE)}
         // Under the voice the music sits low; on the end card it comes up.
-        volume={(fr) => (fr < endCardFrom ? 0.16 : Math.min(0.55, 0.16 + (fr - endCardFrom) * 0.03))}
+        volume={(fr) => (fr < endCardFrom ? (script.voice === "clip" ? 0.1 : 0.16) : Math.min(0.55, 0.16 + (fr - endCardFrom) * 0.03))}
       />
     </AbsoluteFill>
   );

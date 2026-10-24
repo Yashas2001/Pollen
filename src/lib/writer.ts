@@ -34,11 +34,18 @@ How these videos work:
 - The first second decides everything. The hook is a sharp, specific line a scroller from the target audience would stop for: a pain they feel, a surprising claim, or a "POV" moment. Never open with the brand name or "Introducing".
 - Speak like a person, not a landing page. Short sentences. Concrete details from the site beat adjectives.
 - Total voiceover 12 to 22 seconds. 4 to 7 shots. Each shot has one short voice line and 2 to 7 words of on-screen text that adds to the voice instead of repeating it word for word.
-- Show the product. Every shot is a motion-design scene. Pick the scene that shows the point best, and vary them: never two "panel" shots in a row.
+- Every video has real moving footage. If they gave no talking clip and no footage of their own, use stock shots for the hook, the problem and any beat a person carries in the recipe, and show the product itself with their site, photos and scenes. With their own material, stock only fills a gap. At most half the shots are stock.
+- Their own material beats the website. Their photos (labelled "their photo") come before site images and screenshots.
+- Real footage beats everything. When the assets include videos (site videos, their screen recordings) or a talking clip, build the videos around them: talk and footage shots carry most of each video, and motion-design scenes only fill in what the footage can't show. Without footage, every shot is a motion-design scene: pick the one that shows the point best and vary them (never two "panel" shots in a row).
+- Write hooks the way creators talk, shaped like the recipe's hook, never a slogan ("I stopped editing my own videos" beats "Goodbye, manual editing").
 - Only claim what the site supports. No invented numbers, customers or awards.
 - The last voice line leads into the call to action; the cta line is the end card (short, with the domain).
 
-Scenes (set scene and only the fields that scene uses; unused: assetIndex -1, secondAssetIndex -1, elementIndex -1, prompt "", items []):
+Scenes (set scene and only the fields that scene uses; unused: assetIndex -1, secondAssetIndex -1, elementIndex -1, prompt "", items [], clipStart -1, phrase -1, stockQuery ""):
+- talk: the person on camera, full screen, saying this shot's phrase (assetIndex = the clip that phrase comes from). Only in "clip" voice videos.
+- footage: a video asset full screen (assetIndex = that video); clipStart = the second to start from, picked from the video's description so the moment shown matches the line.
+- stock: real stock footage found by stockQuery (2 to 5 concrete search words, e.g. "tired man laptop night", "woman filming phone selfie"), full screen. People, places and moods that set up the story, never the product itself and never someone talking to camera (the lips would not match the voice). clipStart 0.
+  For talk, footage and stock, onScreenText is 1 to 3 punch words (like "CAPTIONS" or "ONE CLICK") that slam in big over the footage.
 - type: big kinetic text only. Best for hooks and turning points.
 - panel: an asset (assetIndex) floating in 3D; full-page screenshots scroll.
 - prompt: a prompt box types "prompt" (a short request a user would type into this product, 3 to 7 words, e.g. "Make it in 4 colors"), it is sent, and the result appears (assetIndex, ideally a product image). Use it when the product does something on request: AI, search, generation, customisation.
@@ -48,11 +55,15 @@ Scenes (set scene and only the fields that scene uses; unused: assetIndex -1, se
 - before_after: a wipe from assetIndex (before, washed out) to secondAssetIndex (after); items = [before label, after label].
 - logo: logo + line. At most once.
 
+voice:
+- "clip": the video is carried by their own words. Only when there is a talking clip. Each shot sets phrase = one phrase number from the transcript, in the order that makes the best video (strongest hook first), each phrase at most once, and voiceLine = that phrase's text copied exactly. 4 to 8 phrases, 12 to 30 seconds in total. The first shot is always talk (their face is the hook), and at least half the shots are talk; the others cut away to footage or a scene that shows what they say in that phrase. Which videos use "clip": the ones whose recipe is carried by a person on camera; a recipe built on product shots, photos or screens keeps that look with an "ai" voice and their footage and photos. If there are talking clips but no recipe needs a person, still make one "clip" video. Phrases in one video come from one clip. With several talking clips, give each "clip" video a different clip; never open two videos on the same phrase.
+- "ai": a voiceover you write (phrase -1 on every shot). No talk shots.
+
 theme: "light" (airy, white cards, blurred product backdrop) or "dark" (cinematic). Follow the recipe's look; without a recipe, light suits physical products and bright brands, dark suits software and tech.
 
 Write three videos.
 
-When you are given winning recipes (structures pulled from Shorts that beat their channel's usual views in this niche), each video follows a different recipe: its hook type and hook pattern, the order and job of its beats, the scene each beat uses, its pacing, its look and its ending, adapted to this product. Copy the structure and the motion design, never their words, footage or claims. Beats marked "person" (someone on camera) can't be filmed here: use the closest scene instead (usually type for a claim, focus or panel for a demo). Set basedOn to that recipe's number. If there are fewer than three recipes, the remaining videos use the formats below with basedOn -1.
+When you are given winning recipes (structures pulled from Shorts that beat their channel's usual views in this niche), each video follows a different recipe: its hook type and hook pattern, the order and job of its beats, the scene each beat uses, its pacing, its look and its ending, adapted to this product. Copy the structure and the motion design, never their words, footage or claims. Beats marked "person" (someone on camera) use talk when there is a talking clip; otherwise stock (a person in the situation, not talking to camera) or their footage. Set basedOn to that recipe's number. If there are fewer than three recipes, the remaining videos use the formats below with basedOn -1.
 
 Formats (also the visual style: set format to the closest one for every video):
 - hook_demo: a hook line, then show what the product does in 2 to 4 quick beats, then the payoff.
@@ -61,7 +72,7 @@ Formats (also the visual style: set format to the closest one for every video):
 
 Brand colours: pick primary (the brand's accent, used for highlights and the end card), background and text as hex values that look like the site and read well together. Use the colour hints when they make sense.
 
-postCaption is what they paste when posting: one or two lines in the same voice, no hashtags inside it. hashtags: 3 to 5, no # sign.`;
+postCaption is what they paste when posting: one or two lines in the same voice, ending with a short pointer to the link in bio (captions are not clickable), no hashtags inside it, no em dashes (they read as AI-written). hashtags: 3 to 5, no # sign.`;
 
 function recipesText(outliers: Outlier[]): string {
   const withRecipe = outliers.map((o, i) => ({ o, i })).filter(({ o }) => o.recipe);
@@ -82,8 +93,26 @@ ${r.beats.map((b) => `  ${b.seconds}s [${b.scene}] ${b.what}. On screen: ${b.onS
     .join("\n\n");
 }
 
-function userText(site: SiteRead, assets: Asset[], elements: SiteElement[], outliers: Outlier[]): string {
-  const assetList = assets.map((a, i) => `${i}: ${a.label}${a.kind === "image" ? ` (photo, ${a.width}x${a.height})` : ""}`).join("\n");
+export type TalkInfo = {
+  clips: { assetIndex: number; label: string }[];
+  phrases: { clip: number; text: string; start: number; end: number }[];
+} | null;
+
+function assetLine(a: Asset, i: number): string {
+  if (a.kind === "image") return `${i}: ${a.label} (photo, ${a.width}x${a.height})`;
+  if (a.kind === "video" || a.kind === "talk") return `${i}: ${a.kind === "talk" ? "TALKING CLIP" : "VIDEO"} ${Math.round(a.durationSec ?? 0)}s, ${a.width > a.height ? "wide" : "vertical"}. ${a.label}`;
+  return `${i}: ${a.label}`;
+}
+
+function talkText(talk: TalkInfo): string {
+  if (!talk || !talk.phrases.length) return "No talking clips. Every video uses voice \"ai\".";
+  return `Talking clips: ${talk.clips.map((c, i) => `clip ${i} = asset ${c.assetIndex}`).join(", ")}.
+Every phrase they say, numbered across all clips (phrase: clip, seconds, words):
+${talk.phrases.map((p, i) => `${i}: clip ${p.clip}, ${p.start.toFixed(1)}-${p.end.toFixed(1)}s "${p.text}"`).join("\n")}`;
+}
+
+function userText(site: SiteRead, assets: Asset[], elements: SiteElement[], outliers: Outlier[], talk: TalkInfo): string {
+  const assetList = assets.map(assetLine).join("\n");
   const elementList = elements.length ? elements.map((e, i) => `${i}: ${e.kind} "${e.label}"`).join("\n") : "none found";
   return `Winning recipes in this niche:
 ${recipesText(outliers)}
@@ -96,6 +125,8 @@ Colour hints: theme ${site.themeColor ?? "none"}, main button ${site.buttonColor
 Assets you can show (index: what it is):
 ${assetList}
 
+${talkText(talk)}
+
 Parts of the site a focus scene can dive into (elementIndex: kind "text"):
 ${elementList}
 
@@ -105,9 +136,16 @@ Site text:
 ${site.text}`;
 }
 
-export async function planVideos(site: SiteRead, heroPath: string, assets: Asset[], elements: SiteElement[], outliers: Outlier[]): Promise<Plan> {
+export async function planVideos(
+  site: SiteRead,
+  heroPath: string,
+  assets: Asset[],
+  elements: SiteElement[],
+  outliers: Outlier[],
+  talk: TalkInfo = null,
+): Promise<Plan> {
   const hero = (await readFile(heroPath)).toString("base64");
-  const text = userText(site, assets, elements, outliers);
+  const text = userText(site, assets, elements, outliers, talk);
   if (process.env.WRITER === "anthropic") return planWithClaude(hero, text);
   // Luna first; if it's down or the network eats it, Gemini writes instead.
   try {

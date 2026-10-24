@@ -10,21 +10,32 @@ const VOICE_ID = process.env.ELEVENLABS_VOICE_ID ?? "JBFqnCBsd6RMkjVDRZzb";
 const KEYS = (process.env.ELEVENLABS_API_KEYS || process.env.ELEVENLABS_API_KEY || "").split(",").map((k) => k.trim()).filter(Boolean);
 const PER_KEY = 2;
 // Short timeout + retries: venue wifi drops; a 5-minute hang is worse than a quick retry.
-const pool = KEYS.map((apiKey) => ({ client: new ElevenLabsClient({ apiKey, timeoutInSeconds: 45, maxRetries: 2 }), busy: 0 }));
+// A key that runs out of credits is benched for an hour and the request moves on.
+const pool = KEYS.map((apiKey) => ({ client: new ElevenLabsClient({ apiKey, timeoutInSeconds: 45, maxRetries: 2 }), busy: 0, emptyUntil: 0 }));
 const waiting: (() => void)[] = [];
 
-async function withVoiceClient<T>(fn: (client: ElevenLabsClient) => Promise<T>): Promise<T> {
+const free = () =>
+  pool.filter((p) => p.busy < PER_KEY && p.emptyUntil < Date.now()).sort((a, b) => a.busy - b.busy)[0];
+
+export async function withVoiceClient<T>(fn: (client: ElevenLabsClient) => Promise<T>): Promise<T> {
   for (let attempt = 0; ; attempt++) {
-    let slot = pool.filter((p) => p.busy < PER_KEY).sort((a, b) => a.busy - b.busy)[0];
+    if (pool.every((p) => p.emptyUntil >= Date.now())) throw new Error("Every ElevenLabs key is out of credits.");
+    let slot = free();
     while (!slot) {
       await new Promise<void>((resolve) => waiting.push(resolve));
-      slot = pool.filter((p) => p.busy < PER_KEY).sort((a, b) => a.busy - b.busy)[0];
+      slot = free();
     }
     slot.busy++;
     try {
       return await fn(slot.client);
     } catch (e) {
       const status = (e as { statusCode?: number }).statusCode;
+      const empty = status === 401 && /quota_exceeded|credits/i.test(JSON.stringify((e as { body?: unknown }).body ?? (e as Error).message));
+      if (empty) {
+        slot.emptyUntil = Date.now() + 60 * 60_000;
+        console.warn(`[voice] key ${pool.indexOf(slot) + 1} is out of credits, using the others`);
+        continue;
+      }
       if (status !== 429 || attempt >= 6) throw e;
       await new Promise((r) => setTimeout(r, 800 * (attempt + 1)));
     } finally {

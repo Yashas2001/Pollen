@@ -22,6 +22,8 @@ export type SiteRead = {
   elements: SiteElement[];
   // Product / marketing images from the page, downloaded into the job dir.
   images: { file: string; width: number; height: number; label: string }[];
+  // Product videos already on the page (demo loops, hero videos), biggest first.
+  videoUrls: string[];
 };
 
 export type SiteElement = { label: string; kind: "button" | "heading" | "card" | "image"; x: number; y: number; w: number; h: number };
@@ -141,6 +143,22 @@ export async function readSite(rawUrl: string, jobDir: string): Promise<SiteRead
         .slice(0, 16);
       return { elements };
     }, MAX_FULL_HEIGHT);
+
+    // Videos on the page: the closest thing to real product footage a site has.
+    const videoUrls = await page.evaluate(() => {
+      const found: { url: string; area: number }[] = [];
+      document.querySelectorAll("video").forEach((v) => {
+        const r = v.getBoundingClientRect();
+        const srcs = [v.currentSrc, v.src, v.getAttribute("data-src") ?? "", ...Array.from(v.querySelectorAll("source")).map((s) => s.src || s.getAttribute("data-src") || "")];
+        const url = srcs.find((u) => u && !u.startsWith("blob:") && !/\.m3u8|youtube|vimeo/i.test(u));
+        if (url) found.push({ url: new URL(url, location.href).href, area: r.width * r.height });
+      });
+      const seen = new Set<string>();
+      return found
+        .sort((a, b) => b.area - a.area)
+        .map((f) => f.url)
+        .filter((u) => !seen.has(u) && seen.add(u));
+    });
 
     const heroFile = "site-hero.jpg";
     await page.screenshot({ path: path.join(jobDir, heroFile), type: "jpeg", quality: 85 });
@@ -267,6 +285,7 @@ export async function readSite(rawUrl: string, jobDir: string): Promise<SiteRead
       heroHeight: Math.floor(PHONE.height * SCALE),
       elements: found.elements.map((e) => ({ ...e, x: e.x * SCALE, y: e.y * SCALE, w: e.w * SCALE, h: e.h * SCALE })),
       images,
+      videoUrls,
     };
   } finally {
     await browser.close();

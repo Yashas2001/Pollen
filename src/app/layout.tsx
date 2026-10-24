@@ -13,8 +13,8 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Hackathon",
-  description: "Marketing videos for your product, every week.",
+  title: "Pollen",
+  description: "Tell it you need customers. It shows what's working in your market, makes your version, finds the people who want your product, and shows you who clicked.",
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {

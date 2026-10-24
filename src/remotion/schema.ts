@@ -10,6 +10,9 @@ export type FormatId = z.infer<typeof FormatId>;
 // The motion-design scenes a shot can be. Each one is a real animation in
 // src/remotion/scenes, modelled on what winning product Shorts actually do.
 export const SCENES = [
+  "talk", // the person's own clip, full screen (only with an uploaded talking clip)
+  "footage", // real product footage full screen (site video / screen recording) with punch words
+  "stock", // stock footage (people, places, moods) found by stockQuery, full screen with punch words
   "type", // big kinetic text only (hooks, turning points)
   "panel", // the product (screenshot / image) floating in 3D, scrolling
   "prompt", // a prompt box types a request, send is pressed, the result pops in
@@ -42,6 +45,12 @@ export const Shot = z.object({
   prompt: z.string(),
   // checklist: 3 to 5 short items. fan: 3 to 5 labels for the variations. before_after: ["Before label", "After label"]. [] otherwise.
   items: z.array(z.string()),
+  // footage: where in the clip to start, in seconds (-1 otherwise).
+  clipStart: z.number(),
+  // voice "clip": which phrase of their talking clip is heard in this shot (-1 otherwise).
+  phrase: z.number().int(),
+  // stock: what to search the stock library for, 2 to 5 words ("" otherwise).
+  stockQuery: z.string(),
 });
 export type Shot = z.infer<typeof Shot>;
 
@@ -49,6 +58,8 @@ export const Script = z.object({
   format: FormatId,
   // "dark": the cinematic launch-film stage. "light": airy, soft, white cards (CapCut-style).
   theme: z.enum(["dark", "light"]),
+  // "clip": the voice is the person's own talking clip, cut together. "ai": a voiceover.
+  voice: z.enum(["ai", "clip"]),
   title: z.string(), // internal name, e.g. "The 3 a.m. invoice problem"
   shots: z.array(Shot),
   cta: z.string(), // end card line, e.g. "Try it free at acme.com"
@@ -78,10 +89,11 @@ export type Caption = {
 
 export type Asset = {
   url: string; // relative (/api/files/...) in the app, absolute when rendering
-  kind: "screenshot_full" | "screenshot_hero" | "image";
+  kind: "screenshot_full" | "screenshot_hero" | "image" | "video" | "talk";
   width: number;
   height: number;
   label: string; // what Claude was told this asset is
+  durationSec?: number; // video / talk
 };
 
 export type SiteElement = { label: string; kind: "button" | "heading" | "card" | "image"; x: number; y: number; w: number; h: number };

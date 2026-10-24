@@ -22,11 +22,14 @@ export type Job = {
   id: string;
   createdAt: string;
   url: string;
+  goal: string; // what they asked for, e.g. "I need my first 50 users"
   step: JobStep;
   error?: string;
   research?: Research;
   plan?: Plan;
   videos: JobVideo[];
+  // Tracked link-in-bio per platform (captions on TikTok / Reels / Shorts aren't clickable).
+  bioLinks?: { channel: "tiktok" | "reels" | "shorts"; url: string }[];
   // People finder runs beside the videos and never blocks "ready".
   peopleStatus?: "finding" | "done" | "failed";
   people?: Person[];
@@ -35,8 +38,8 @@ export type Job = {
 export const jobDir = (id: string) => path.join(DATA_DIR, id);
 export const fileUrl = (id: string, name: string) => `/api/files/${id}/${name}`;
 
-export async function createJob(url: string): Promise<Job> {
-  const job: Job = { id: randomUUID().slice(0, 8), createdAt: new Date().toISOString(), url, step: "queued", videos: [] };
+export async function createJob(url: string, goal: string): Promise<Job> {
+  const job: Job = { id: randomUUID().slice(0, 8), createdAt: new Date().toISOString(), url, goal, step: "queued", videos: [] };
   await mkdir(jobDir(job.id), { recursive: true });
   await saveJob(job);
   return job;
@@ -53,14 +56,26 @@ export async function getJob(id: string): Promise<Job | null> {
 
 export async function saveJob(job: Job) {
   const file = path.join(jobDir(job.id), "job.json");
-  await writeFile(`${file}.tmp`, JSON.stringify(job, null, 2));
-  await rename(`${file}.tmp`, file);
+  const tmp = `${file}.${randomUUID().slice(0, 6)}.tmp`;
+  await writeFile(tmp, JSON.stringify(job, null, 2));
+  await rename(tmp, file);
 }
 
-export async function updateJob(id: string, change: (job: Job) => void): Promise<Job> {
-  const job = await getJob(id);
-  if (!job) throw new Error(`Job ${id} not found`);
-  change(job);
-  await saveJob(job);
-  return job;
+// Several parts of a job update it at once (research, people finder, renders), so
+// updates to one job run one after another; otherwise one read-modify-write loses the other.
+// On globalThis because Next can load this module once per route.
+const queues: Map<string, Promise<unknown>> = ((globalThis as { __jobQueues?: Map<string, Promise<unknown>> }).__jobQueues ??=
+  new Map());
+
+export function updateJob(id: string, change: (job: Job) => void): Promise<Job> {
+  const run = (queues.get(id) ?? Promise.resolve()).catch(() => {}).then(async () => {
+    const job = await getJob(id);
+    if (!job) throw new Error(`Job ${id} not found`);
+    change(job);
+    await saveJob(job);
+    return job;
+  });
+  queues.set(id, run);
+  void run.finally(() => queues.get(id) === run && queues.delete(id)).catch(() => {});
+  return run;
 }

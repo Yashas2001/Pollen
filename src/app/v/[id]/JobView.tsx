@@ -77,12 +77,16 @@ export function JobView({ id }: { id: string }) {
   }
 
   const outliers = job.research?.outliers ?? [];
+  const domain = job.url.replace(/^https?:\/\//, "").replace(/\/.*$/, "");
   return (
     <div className="w-full max-w-6xl">
-      <h1 className="mb-1 text-3xl font-bold">Your posts for this week</h1>
+      <p className="text-sm font-bold uppercase tracking-[0.2em] text-black/40">Pollen · {domain}</p>
+      <h1 className="mt-1 mb-1 text-3xl font-bold">{job.goal ?? "Your first customers"}</h1>
       <p className="mb-8 text-black/60">{job.plan?.brief.what}</p>
       {outliers.length ? <WhatsWorking research={job.research!} /> : null}
-      <div className="grid gap-8 md:grid-cols-3">
+      <h2 className="mb-1 text-xl font-bold">Your version</h2>
+      <p className="mb-4 text-sm text-black/50">Made from your real product, in the formats that are winning right now.</p>
+      <div className="flex flex-col gap-10">
         {job.videos.map((v, i) => (
           <VideoCard
             key={i}
@@ -94,6 +98,7 @@ export function JobView({ id }: { id: string }) {
           />
         ))}
       </div>
+      {job.bioLinks?.length ? <BioLinks links={job.bioLinks} /> : null}
       <People job={job} />
       <Scoreboard jobId={job.id} />
       <EarlyAccess job={job} />
@@ -207,7 +212,33 @@ function VideoCard({
   }
 
   return (
-    <div className="flex flex-col gap-3">
+    <div className="grid gap-6 rounded-3xl bg-white p-4 shadow-sm sm:p-6 md:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_minmax(0,1fr)]">
+      {basedOn ? (
+        <div className="flex flex-col gap-2">
+          <p className="text-sm font-semibold uppercase tracking-wide text-black/40">
+            Their hit · {basedOn.multiple}x usual views
+          </p>
+          <div className="overflow-hidden rounded-3xl bg-black">
+            <iframe
+              src={`https://www.youtube.com/embed/${basedOn.videoId}`}
+              title={basedOn.title}
+              loading="lazy"
+              allow="autoplay; encrypted-media; picture-in-picture"
+              allowFullScreen
+              className="block w-full border-0"
+              style={{ aspectRatio: "9 / 16" }}
+            />
+          </div>
+          <p className="text-sm text-black/60">
+            {basedOn.channel} · {fmt(basedOn.views)} views vs {fmt(basedOn.channelMedianViews)} usual
+          </p>
+          {basedOn.recipe ? <p className="text-sm text-black/60">{basedOn.recipe.whyItWorks}</p> : null}
+        </div>
+      ) : null}
+      <div className="flex flex-col gap-2">
+        <p className="text-sm font-semibold uppercase tracking-wide text-black/40">
+          {basedOn ? "Your version" : FORMAT_NAME[props.script.format] ?? props.script.format}
+        </p>
       <div className="overflow-hidden rounded-3xl bg-black shadow-xl">
         <Player
           component={SocialVideo}
@@ -223,22 +254,10 @@ function VideoCard({
           initialFrame={Math.min(24, totalFrames(props) - 1)}
         />
       </div>
-      {basedOn?.recipe ? (
-        <a href={basedOn.url} target="_blank" rel="noreferrer" className="flex items-center gap-3 rounded-2xl bg-white p-2 shadow-sm">
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src={basedOn.thumbnail} alt="" className="h-14 w-10 rounded-lg object-cover" />
-          <div className="min-w-0 text-sm">
-            <p className="font-semibold">
-              Based on a {basedOn.multiple}x hit by {basedOn.channel}
-            </p>
-            <p className="truncate text-black/50">{basedOn.recipe.hookType} hook · {fmt(basedOn.views)} views</p>
-          </div>
-        </a>
-      ) : (
-        <p className="text-sm font-semibold uppercase tracking-wide text-black/50">
-          {FORMAT_NAME[props.script.format] ?? props.script.format}
-        </p>
-      )}
+      </div>
+      <div className="flex flex-col justify-end gap-3">
+        <p className="text-sm text-black/50">Caption</p>
+        <p className="whitespace-pre-line rounded-2xl bg-black/5 p-3 text-sm">{caption}</p>
       {render.status === "done" && render.file ? (
         <a
           href={`/api/files/${jobId}/${render.file}?download`}
@@ -265,6 +284,38 @@ function VideoCard({
       >
         {copied ? "Copied" : "Copy caption"}
       </button>
+      </div>
     </div>
+  );
+}
+
+const BIO_NAME = { tiktok: "TikTok", reels: "Instagram", shorts: "YouTube" } as const;
+
+// Captions on TikTok / Reels / Shorts aren't clickable, so clicks come through the bio link.
+function BioLinks({ links }: { links: NonNullable<Job["bioLinks"]> }) {
+  const [copied, setCopied] = useState<string | null>(null);
+  return (
+    <section className="mt-10 rounded-3xl bg-white p-6 shadow-sm">
+      <h2 className="text-xl font-bold">Your link in bio</h2>
+      <p className="mb-4 text-sm text-black/50">Put each one in that profile&apos;s bio. Every click shows up on your scoreboard.</p>
+      <div className="flex flex-col gap-2">
+        {links.map((l) => (
+          <div key={l.channel} className="flex flex-wrap items-center gap-3 rounded-2xl bg-black/5 p-3">
+            <span className="w-24 font-semibold">{BIO_NAME[l.channel]}</span>
+            <span className="min-w-0 flex-1 truncate text-sm text-black/60">{l.url}</span>
+            <button
+              onClick={() => {
+                void navigator.clipboard.writeText(l.url);
+                setCopied(l.channel);
+                setTimeout(() => setCopied(null), 1500);
+              }}
+              className="rounded-xl bg-black px-4 py-2 text-sm font-semibold text-white"
+            >
+              {copied === l.channel ? "Copied" : "Copy"}
+            </button>
+          </div>
+        ))}
+      </div>
+    </section>
   );
 }

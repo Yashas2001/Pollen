@@ -13,6 +13,7 @@ import { FanScene } from "../scenes/Fan";
 import { FocusScene } from "../scenes/Focus";
 import { ChecklistScene } from "../scenes/Checklist";
 import { BeforeAfterScene } from "../scenes/BeforeAfter";
+import { FootageScene, Punch, TalkScene } from "../scenes/Footage";
 
 type Props = {
   f: number; // local frame
@@ -25,11 +26,13 @@ type Props = {
   assets: Asset[];
   elements: SiteElement[];
   logoUrl: string | null;
+  // The video runs on their own clip: every shot uses punch words, like a creator's edit.
+  clipMode?: boolean;
 };
 
 const PROBLEM: [string, string] = ["#FF6B8B", "#FF9A62"];
 
-export const ShotView: React.FC<Props> = ({ f, dur, shot, index, format, brand, theme, assets, elements, logoUrl }) => {
+export const ShotView: React.FC<Props> = ({ f, dur, shot, index, format, brand, theme, assets, elements, logoUrl, clipMode = false }) => {
   const isHook = index === 0;
   const grad: [string, string] = shot.mood === "problem" ? PROBLEM : theme.gradient;
   const asset = assets[shot.assetIndex] ?? null;
@@ -41,9 +44,35 @@ export const ShotView: React.FC<Props> = ({ f, dur, shot, index, format, brand, 
   let scene = shot.scene;
   const page = assets.find((a) => a.kind === "screenshot_full") ?? null;
   const el = elements[shot.elementIndex] ?? null;
+  const isVideo = (a: Asset | null) => a?.kind === "video" || a?.kind === "talk";
+  const talk = asset?.kind === "talk" ? asset : (assets.find((a) => a.kind === "talk") ?? null);
+  if (scene === "talk" && !talk) scene = "type";
+  // stock shots become footage once a clip is found; one that found nothing shows the words
+  if (scene === "stock") scene = isVideo(asset) ? "footage" : "type";
+  if (scene === "footage" && !isVideo(asset)) scene = asset ? "panel" : "type";
+  // a video can't sit in an image scene: show it as footage
+  if (scene !== "talk" && scene !== "footage" && isVideo(asset)) scene = "footage";
   if (scene === "focus" && (!page || !el)) scene = asset ? "panel" : "type";
   if ((scene === "panel" || scene === "before_after") && !asset) scene = "type";
   if (scene === "checklist" && shot.items.length === 0) scene = asset ? "panel" : "type";
+
+  if (scene === "talk" && talk) {
+    return (
+      <>
+        <TalkScene f={f} dur={dur} asset={talk} clipStart={shot.clipStart ?? 0} index={index} />
+        <Punch f={f} dur={dur} text={text} y={isHook ? 300 : 1060} />
+      </>
+    );
+  }
+
+  if (scene === "footage" && asset) {
+    return (
+      <>
+        <FootageScene f={f} dur={dur} asset={asset} clipStart={shot.clipStart ?? 0} theme={theme} index={index} />
+        <Punch f={f} dur={dur} text={text} y={asset.height / Math.max(1, asset.width) >= 1.3 ? 720 : 300} />
+      </>
+    );
+  }
 
   if (scene === "logo") {
     const s = prog(f, 0, 16, (t) => backOut(t, 2));
@@ -104,7 +133,8 @@ export const ShotView: React.FC<Props> = ({ f, dur, shot, index, format, brand, 
         <BeforeAfterScene f={f} dur={dur} before={asset} after={assets[shot.secondAssetIndex] ?? asset} labels={shot.items} theme={theme} />
       ) : null}
 
-      <div style={{ position: "absolute", left: 0, right: 0, top: 150, height: 380, display: "flex", alignItems: "center", gap: 30, padding: "0 80px", justifyContent: reason !== null ? "flex-start" : "center" }}>
+      {clipMode ? <Punch f={f} dur={dur} text={text} y={250} /> : null}
+      <div style={{ display: clipMode ? "none" : "flex", position: "absolute", left: 0, right: 0, top: 150, height: 380, alignItems: "center", gap: 30, padding: "0 80px", justifyContent: reason !== null ? "flex-start" : "center" }}>
         {reason !== null ? (
           <div
             style={{
@@ -137,7 +167,7 @@ export const ShotView: React.FC<Props> = ({ f, dur, shot, index, format, brand, 
           />
         </div>
       </div>
-      <div style={{ position: "absolute", left: 60, top: 70, fontFamily: HEADLINE_FONT, fontWeight: 700, fontSize: 30, color: theme.sub, opacity: numIn }}>{brand.name}</div>
+      {clipMode ? null : <div style={{ position: "absolute", left: 60, top: 70, fontFamily: HEADLINE_FONT, fontWeight: 700, fontSize: 30, color: theme.sub, opacity: numIn }}>{brand.name}</div>}
     </>
   );
 };

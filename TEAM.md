@@ -1,4 +1,4 @@
-# Vibe: who owns what (hackathon, 2026-10-24)
+# Pollen: who owns what (hackathon, 2026-10-24)
 
 Ready by 14:00, live by 14:20. Merge to `main` at 13:45.
 
