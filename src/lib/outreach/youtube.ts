@@ -1,7 +1,7 @@
 // YouTube lookups for outreach: longer niche videos and channel details.
 // Same official API and key as research.
 
-import { cachedSearch } from "@/lib/research/youtube";
+import { cachedSearch, withPageFallback } from "@/lib/research/youtube";
 
 const API = "https://www.googleapis.com/youtube/v3";
 
@@ -21,6 +21,10 @@ export async function searchVideos(query: string, max = 25): Promise<string[]> {
 }
 
 async function runSearchVideos(query: string, max: number): Promise<string[]> {
+  return withPageFallback(query, "medium", max, () => apiSearchVideos(query, max));
+}
+
+async function apiSearchVideos(query: string, max: number): Promise<string[]> {
   const since = new Date(Date.now() - 365 * 864e5).toISOString();
   const data = await yt<{ items: { id: { videoId: string } }[] }>("search", {
     part: "id",
