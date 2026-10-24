@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import type { Job } from "@/lib/jobs";
 import type { Person, Platform } from "@/lib/people/types";
 
@@ -11,6 +11,8 @@ const PLATFORM: Record<Platform, { name: string; badge: string }> = {
   x: { name: "X", badge: "bg-black/10 text-black" },
 };
 
+const finished = (job: Job) => job.peopleStatus === "done" || job.peopleStatus === "failed";
+
 function ago(iso: string) {
   const mins = Math.max(1, Math.round((Date.now() - new Date(iso).getTime()) / 60_000));
   if (mins < 60) return `${mins} min ago`;
@@ -19,7 +21,19 @@ function ago(iso: string) {
 }
 
 // People asking for this product right now, with a reply ready for each. Nothing is posted for them.
-export function People({ job }: { job: Job }) {
+export function People({ job: fromPage }: { job: Job }) {
+  // The page stops polling once the videos are ready, and the people finder can finish later
+  // (or its "finding" status can be overwritten), so this section keeps polling until it's done.
+  const [latest, setLatest] = useState<Job | null>(null);
+  const job = latest && latest.id === fromPage.id && !finished(fromPage) ? latest : fromPage;
+  useEffect(() => {
+    if (finished(job)) return;
+    const t = setInterval(async () => {
+      const res = await fetch(`/api/jobs/${job.id}`, { cache: "no-store" }).catch(() => null);
+      if (res?.ok) setLatest((await res.json()) as Job);
+    }, 2000);
+    return () => clearInterval(t);
+  }, [job]);
   const people = job.people ?? [];
   return (
     <section className="mt-10 rounded-3xl bg-white p-6 shadow-sm">
