@@ -49,13 +49,50 @@ export async function reddit(subreddits: string[], terms: string[], days = 7, as
 
 // Google, through Bright Data's SERP API. tbs=qdr:w / qdr:m = past week / month only.
 // LinkedIn results come back as google.com/goto redirects; the Location header is the real post.
-async function google(query: string, tbs: "qdr:w" | "qdr:m"): Promise<{ url: string; snippet: string }[]> {
+type Hit = { url: string; snippet: string };
+
+// Bright Data guard rails, shared by every round of every run in this server:
+// - at most BATCH searches in flight; the rest wait for a free slot (bursts of 30+ got Google captchas)
+// - the same query is searched once per CACHE_MS; later rounds reuse it
+// - after a captcha, no searches for PAUSE_MS (retrying only brings more captchas)
+const BATCH = 10;
+const CACHE_MS = 10 * 60_000;
+const PAUSE_MS = 5 * 60_000;
+let inFlight = 0;
+const waiting: (() => void)[] = [];
+const cache = new Map<string, { at: number; hits: Promise<Hit[]> }>();
+let pausedUntil = 0;
+
+async function slot<T>(work: () => Promise<T>): Promise<T> {
+  if (inFlight < BATCH) inFlight++;
+  else await new Promise<void>((resolve) => waiting.push(resolve)); // a finishing search hands its slot over
+  try {
+    return await work();
+  } finally {
+    const next = waiting.shift();
+    if (next) next();
+    else inFlight--;
+  }
+}
+
+function google(query: string, tbs: "qdr:w" | "qdr:m"): Promise<Hit[]> {
+  const key = `${tbs} ${query.toLowerCase()}`;
+  const cached = cache.get(key);
+  if (cached && Date.now() - cached.at < CACHE_MS) return cached.hits;
+  const hits = slot(() => search(query, tbs));
+  cache.set(key, { at: Date.now(), hits });
+  hits.catch(() => cache.delete(key)); // only keep successes
+  return hits;
+}
+
+async function search(query: string, tbs: "qdr:w" | "qdr:m"): Promise<Hit[]> {
+  if (Date.now() < pausedUntil) throw new Error("bright data: paused after a Google captcha");
   const url = `https://www.google.com/search?q=${encodeURIComponent(query)}&tbs=${tbs}&brd_json=1&num=25`;
   const deadline = AbortSignal.timeout(45_000); // hard cut-off for all attempts; googleAll keeps what arrived
   let res: Response | undefined;
-  // Bright Data answers 200 with an empty body and an x-brd-error header when it refuses a request
-  // (e.g. our outgoing IP is on the zone's denylist). Refusals are fast, and the venue network
-  // rotates IPs, so try up to 3 times.
+  // Bright Data answers 200 with an empty body and an x-brd-error header when it refuses a request.
+  // An IP-denylist refusal is fast and the venue network rotates IPs, so that one is retried (3 tries);
+  // a captcha or "recently failed" is not.
   for (let attempt = 0; attempt < 3; attempt++) {
     res = await fetch("https://api.brightdata.com/request", {
       method: "POST",
@@ -63,8 +100,10 @@ async function google(query: string, tbs: "qdr:w" | "qdr:m"): Promise<{ url: str
       body: JSON.stringify({ zone: process.env.BRIGHTDATA_SERP_ZONE ?? "viskara_serp", url, format: "raw" }),
       signal: deadline,
     });
-    if (!res.headers.get("x-brd-error")) break;
+    if (!/ip_blacklisted/.test(res.headers.get("x-brd-error") ?? "")) break;
   }
+  const refusal = `${res?.headers.get("x-brd-err-msg") ?? ""} ${res?.headers.get("x-brd-error") ?? ""}`;
+  if (/captcha/i.test(refusal)) pausedUntil = Date.now() + PAUSE_MS;
   if (!res?.ok || res.headers.get("x-brd-error"))
     throw new Error(`bright data: ${res?.headers.get("x-brd-err-msg") ?? res?.headers.get("x-brd-error") ?? res?.status}`);
   const { organic = [] } = (await res.json()) as { organic?: { link: string; title?: string; description?: string }[] };
