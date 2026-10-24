@@ -57,14 +57,16 @@ export function LinkForm() {
 
   return (
     <div className="flex w-full max-w-xl flex-col gap-5">
-      <div className="flex items-center justify-between">
+      <div className="relative flex h-6 items-center justify-center">
         {step > 1 ? (
-          <button type="button" onClick={() => (setError(null), setStep((s) => (s - 1) as 1 | 2))} className="text-sm font-semibold text-black/50">
+          <button
+            type="button"
+            onClick={() => (setError(null), setStep((s) => (s - 1) as 1 | 2))}
+            className="absolute left-0 text-sm font-semibold text-black/50"
+          >
             ← Back
           </button>
-        ) : (
-          <span />
-        )}
+        ) : null}
         <span className="flex gap-1.5" aria-label={`Step ${step} of 3`}>
           {[1, 2, 3].map((n) => (
             <span key={n} className={`h-1.5 w-6 rounded-full ${n <= step ? "bg-black" : "bg-black/15"}`} />
@@ -74,7 +76,10 @@ export function LinkForm() {
 
       {step === 1 ? (
         <form onSubmit={nextFromUrl} className="flex flex-col gap-4">
-          <h1 className="text-3xl font-bold tracking-tight sm:text-4xl">What are we getting customers for?</h1>
+          <div>
+            <h1 className="text-3xl font-bold tracking-tight sm:text-4xl">What&apos;s your product&apos;s link?</h1>
+            <p className="mt-2 text-black/50">Your website or app page. We&apos;ll read it to get to know your product.</p>
+          </div>
           <input
             ref={urlBox}
             defaultValue={url}
@@ -85,6 +90,7 @@ export function LinkForm() {
             autoCorrect="off"
             className="h-14 rounded-2xl border border-black/10 bg-white px-5 text-lg text-black outline-none focus:border-black/40"
           />
+          <p className="-mt-2 text-sm text-black/40">e.g. cal.com · linear.app · notion.so</p>
           <button type="submit" className="h-14 rounded-2xl bg-black text-lg font-semibold text-white">
             Next
           </button>

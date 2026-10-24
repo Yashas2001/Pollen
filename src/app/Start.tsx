@@ -27,45 +27,49 @@ export function Start() {
       .catch(() => {});
   }, [user]);
 
-  if (!user) return <div className="h-14" />;
+  if (!user) return <div className="flex-1" />;
 
   return (
-    <div className="flex w-full max-w-xl flex-col items-center gap-6">
-      <div className="flex w-full items-center justify-between gap-3 text-sm text-black/60">
-        <span className="flex min-w-0 items-center gap-2">
+    <div className="flex w-full flex-1 flex-col items-center">
+      <header className="flex w-full max-w-5xl items-center justify-between gap-3 py-5 text-sm">
+        <Link href="/app" className="font-bold uppercase tracking-[0.2em] text-black/40">
+          Pollen
+        </Link>
+        <span className="flex min-w-0 items-center gap-3 text-black/60">
           {user.photoURL ? (
             // eslint-disable-next-line @next/next/no-img-element
             <img src={user.photoURL} alt="" className="h-7 w-7 rounded-full" referrerPolicy="no-referrer" />
           ) : null}
-          <span className="truncate">{user.displayName ?? user.email}</span>
+          <span className="hidden truncate sm:inline">{user.displayName ?? user.email}</span>
+          <button onClick={() => void signOutUser()} className="shrink-0 font-semibold text-black/50 underline">
+            Sign out
+          </button>
         </span>
-        <button onClick={() => void signOutUser()} className="shrink-0 font-semibold text-black/50 underline">
-          Sign out
-        </button>
-      </div>
-      <LinkForm />
-      {jobs.length ? (
-        <div className="w-full text-left">
-          <p className="mb-2 text-sm font-semibold text-black/50">Your products</p>
-          <div className="flex flex-col gap-2">
-            {jobs.map((j) => (
-              <Link
-                key={j.id}
-                href={`/v/${j.id}`}
-                className="flex items-center justify-between gap-3 rounded-2xl bg-white px-4 py-3 shadow-sm"
-              >
-                <span className="min-w-0 truncate font-semibold">{j.url.replace(/^https?:\/\//, "")}</span>
-                <span className="shrink-0 text-sm text-black/50">{j.goal}</span>
-              </Link>
-            ))}
+      </header>
+      <div className="flex w-full flex-1 flex-col items-center justify-center gap-10 pb-16">
+        <LinkForm />
+        {jobs.length ? (
+          <div className="w-full max-w-xl text-left">
+            <p className="mb-2 text-sm font-semibold text-black/50">Your products</p>
+            <div className="flex flex-col gap-2">
+              {jobs.map((j) => (
+                <Link
+                  key={j.id}
+                  href={`/v/${j.id}`}
+                  className="flex items-center justify-between gap-3 rounded-2xl bg-white px-4 py-3 shadow-sm"
+                >
+                  <span className="min-w-0 truncate font-semibold">{j.url.replace(/^https?:\/\//, "")}</span>
+                  <span className="shrink-0 text-sm text-black/50">{j.goal}</span>
+                </Link>
+              ))}
+            </div>
           </div>
-        </div>
-      ) : null}
+        ) : null}
+      </div>
     </div>
   );
 }
 
-// Signed in: straight to the app. Signed out: Google first, then the app.
 export function StartButton() {
   const router = useRouter();
   const user = useUser();
