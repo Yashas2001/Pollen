@@ -79,9 +79,4 @@ Once 1 and 2 are done, wiring it into the People finder is about 30 minutes.
 
 ## Also for Suhas: a bug in `jobs.ts`
 
-`updateJob` isn't safe when two updates overlap, and the People finder runs beside the videos:
-
-1. Every write uses the same `job.json.tmp`. When two overlap, one rename fails with ENOENT and **the whole job fails**. This happened on a real cubix.design run.
-2. Updates can overwrite each other. On another run, `peopleStatus: "finding"` was lost, so the results page stopped polling and the People cards only appeared after a manual refresh.
-
-Fix: in `saveJob`, give each write its own temp name (e.g. `job.json.<uuid>.tmp`), and run `updateJob` calls for the same job one at a time by chaining each on the previous one's promise.
+See [FIX-jobs-ts.md](FIX-jobs-ts.md): overlapping job updates crash jobs and lose writes. It has the fix and a test.
