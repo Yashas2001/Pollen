@@ -2,6 +2,9 @@
 # libraries both Playwright (site screenshots) and Remotion (video renders) need.
 FROM mcr.microsoft.com/playwright:v1.64.1-noble
 
+# ffmpeg/ffprobe: footage prep, screenshot crops, voice cuts.
+RUN apt-get update && apt-get install -y --no-install-recommends ffmpeg && rm -rf /var/lib/apt/lists/*
+
 WORKDIR /app
 ENV NEXT_TELEMETRY_DISABLED=1
 
