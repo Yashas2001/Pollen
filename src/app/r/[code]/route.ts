@@ -27,7 +27,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ code
   } catch {
     return Response.redirect(new URL("/", request.url), 302);
   }
-  target.searchParams.set("utm_source", "vibe");
+  target.searchParams.set("utm_source", "pollen");
   target.searchParams.set("utm_medium", link.channel);
   target.searchParams.set("utm_campaign", code);
   return new Response(null, { status: 302, headers: { Location: target.toString(), "Cache-Control": "no-store" } });

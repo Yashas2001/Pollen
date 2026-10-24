@@ -44,10 +44,11 @@ async function readLinks(): Promise<Record<string, TrackedLink>> {
 
 // One in-process queue: every read-modify-write of links.json waits for the one
 // before it, so links made at the same moment never overwrite each other.
-let queue: Promise<unknown> = Promise.resolve();
+// On globalThis because Next can load this module once per route.
+const g = globalThis as { __linksQueue?: Promise<unknown> };
 function serial<T>(task: () => Promise<T>): Promise<T> {
-  const run = queue.then(task, task);
-  queue = run.catch(() => {});
+  const run = (g.__linksQueue ?? Promise.resolve()).then(task, task);
+  g.__linksQueue = run.catch(() => {});
   return run;
 }
 
@@ -64,8 +65,9 @@ export async function makeLink(
     while (links[code]) code = newCode();
     links[code] = { code, jobId, ...link, createdAt: new Date().toISOString() };
     await mkdir(DATA_ROOT, { recursive: true });
-    await writeFile(`${LINKS_FILE}.tmp`, JSON.stringify(links, null, 2));
-    await rename(`${LINKS_FILE}.tmp`, LINKS_FILE);
+    const tmp = `${LINKS_FILE}.${newCode()}.tmp`;
+    await writeFile(tmp, JSON.stringify(links, null, 2));
+    await rename(tmp, LINKS_FILE);
     return code;
   });
   return { code, url: `${process.env.APP_URL}/r/${code}` };

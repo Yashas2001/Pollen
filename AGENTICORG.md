@@ -1,4 +1,4 @@
-# AgenticOrg agent for Vibe: Reply Coach
+# AgenticOrg agent for Pollen: Reply Coach
 
 For Suhas and Rakshith. Proposal from Yashas (People finder).
 
@@ -16,7 +16,7 @@ The People card shows a badge: **Safe to post**, **Edited**, or **Don't post**, 
 
 ## Why this agent
 
-- **It removes Vibe's biggest risk for users.** A founder who posts a tool link in the wrong subreddit gets banned or downvoted. Our drafts don't know any subreddit's rules today.
+- **It removes Pollen's biggest risk for users.** A founder who posts a tool link in the wrong subreddit gets banned or downvoted. Our drafts don't know any subreddit's rules today.
 - **It needs no connectors.** Our tenant has none ("No active connectors configured"). Most built-in marketing agents expect Twitter, Brandwatch or HubSpot data; without it they hand the task to a human and return nothing.
 - **It shows AgenticOrg working inside the product.** Every run is logged in AgenticOrg, risky output goes to human approval, and the agent gets its own identity for outside calls. Judges can see the agent's runs in the AgenticOrg dashboard.
 - **It stays inside the People finder.** Only `src/lib/people/` and `People.tsx` change. No shared files.
@@ -43,7 +43,7 @@ Return JSON only: {"verdict": "post" | "rewrite" | "skip", "reason": "one line",
 Never post anything yourself.
 ```
 
-## How Vibe calls it
+## How Pollen calls it
 
 After `findPeople` scores and writes the replies, it sends one request per person, all in parallel:
 
@@ -75,7 +75,7 @@ Once 1 and 2 are done, wiring it into the People finder is about 30 minutes.
 ## Other options considered
 
 - **Launch Planner** (a custom Social Media agent): a 7-day posting schedule with captions per platform for the 3 videos. Useful, but it changes Suhas's files (`writer.ts`, `JobView.tsx`).
-- **Pine Labs commerce agents** (Ecommerce Seller, with Plural payments): only worth it if Vibe charges for something. That's Rakshith's Early Access area, and it needs the most setup.
+- **Pine Labs commerce agents** (Ecommerce Seller, with Plural payments): only worth it if Pollen charges for something. That's Rakshith's Early Access area, and it needs the most setup.
 
 ## Also for Suhas: a bug in `jobs.ts`
 

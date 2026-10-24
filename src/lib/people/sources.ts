@@ -8,7 +8,7 @@ const TIMEOUT = 10_000;
 const now = () => Math.floor(Date.now() / 1000);
 
 async function getJson<T>(url: string): Promise<T> {
-  const res = await fetch(url, { signal: AbortSignal.timeout(TIMEOUT), headers: { "User-Agent": "vibe-people-finder/0.1" } });
+  const res = await fetch(url, { signal: AbortSignal.timeout(TIMEOUT), headers: { "User-Agent": "pollen-people-finder/0.1" } });
   if (!res.ok) throw new Error(`${new URL(url).host} ${res.status}`);
   return (await res.json()) as T;
 }
