@@ -1,13 +1,14 @@
 import { getUser, isAdmin, readUsers } from "@/lib/auth";
 import { listJobs } from "@/lib/jobs";
 import { getStats } from "@/lib/links";
+import { readLimitHits } from "@/lib/limits";
 
 // The users proof: everyone who signed in, what they ran, and the clicks it brought them.
 export async function GET(request: Request) {
   const user = await getUser(request);
   if (!isAdmin(user)) return Response.json({ error: "Admins only" }, { status: 403 });
 
-  const [users, jobs] = await Promise.all([readUsers(), listJobs()]);
+  const [users, jobs, hits] = await Promise.all([readUsers(), listJobs(), readLimitHits()]);
   const clicks = new Map(await Promise.all(jobs.map(async (j) => [j.id, (await getStats(j.id)).totalClicks] as const)));
 
   const rows = Object.values(users)
@@ -29,6 +30,9 @@ export async function GET(request: Request) {
       signedUp: rows.length,
       usedIt: rows.filter((r) => r.products.length).length,
       gotClicks: rows.filter((r) => r.clicks > 0).length,
+      // Wanted another run after the limit: demand proof.
+      wantedMore: hits.length,
+      wantedMoreEmails: hits.map((h) => `${h.email} (${h.reason === "used" ? "used their free runs" : "day was full"})`),
       rows,
     },
     { headers: { "Cache-Control": "no-store" } },

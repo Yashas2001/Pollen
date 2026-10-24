@@ -1,9 +1,10 @@
 import { GoogleGenAI, ThinkingLevel } from "@google/genai";
 import { z } from "zod";
 import type { Job } from "@/lib/jobs";
-import { getVideos, searchShorts, type Video } from "@/lib/research/youtube";
+import { CLASSIC } from "@/lib/research";
+import { getVideos, searchShorts } from "@/lib/research/youtube";
 import { getChannels, searchVideos } from "./youtube";
-import { findEmails, siteContacts } from "./contacts";
+import { bioSites, findEmails, siteContacts } from "./contacts";
 import type { Creator, Outreach, Partner } from "./types";
 
 // Who to reach out to: creators whose audience already watches this problem (YouTube,
@@ -61,31 +62,46 @@ const noLinks = (text: string) =>
 
 // ---------- Creators ----------
 
+// No email in their YouTube bio: try the first two sites it links to (their own site or
+// a link-in-bio page). Only emails they published, never guessed.
+async function bioEmail(description: string): Promise<string | null> {
+  for (const site of bioSites(description).slice(0, 2)) {
+    const found = await siteContacts(site).catch(() => null);
+    if (found?.emails[0]) return found.emails[0];
+  }
+  return null;
+}
+
 const Picked = z.object({
-  picks: z.array(z.object({ i: z.number(), why: z.string(), subject: z.string(), dm: z.string() })),
+  picks: z.array(z.object({ i: z.number(), video: z.string(), why: z.string(), subject: z.string(), dm: z.string() })),
 });
 
-async function findCreators(job: Job, notes: string[]): Promise<Creator[]> {
+export async function findCreators(job: Job, notes: string[]): Promise<Creator[]> {
   const niche = job.research?.niche;
   if (!niche) return [];
 
-  const ids = new Set<string>();
-  const searches = [
-    ...niche.queries.slice(0, 2).map((q) => () => searchShorts(q)), // same as research: cached, often free
-    () => searchVideos(niche.queries[0] ?? niche.niche),
-  ];
-  for (const s of searches) {
-    try {
-      (await s()).forEach((id) => ids.add(id));
-    } catch (e) {
-      notes.push(`creator search: ${(e as Error).message}`);
+  // Research already looked at the niche's channels: start from those, no new search.
+  // Older jobs without them, or RESEARCH_MODE=classic, search like before (100 quota units a search).
+  let videos: { id: string; title: string; channelId: string; views: number }[] = (!CLASSIC && job.research?.pool) || [];
+  if (!videos.length) {
+    const ids = new Set<string>();
+    const searches = [
+      ...niche.queries.slice(0, 2).map((q) => () => searchShorts(q)), // same as research: cached, often free
+      () => searchVideos(niche.queries[0] ?? niche.niche),
+    ];
+    for (const s of searches) {
+      try {
+        (await s()).forEach((id) => ids.add(id));
+      } catch (e) {
+        notes.push(`creator search: ${(e as Error).message}`);
+      }
     }
+    if (!ids.size) return [];
+    videos = await getVideos([...ids]);
   }
-  if (!ids.size) return [];
 
   // Their most-watched video in this niche, one per channel.
-  const videos = await getVideos([...ids]);
-  const best = new Map<string, Video>();
+  const best = new Map<string, (typeof videos)[number]>();
   for (const v of videos.sort((a, b) => b.views - a.views)) if (!best.has(v.channelId)) best.set(v.channelId, v);
 
   const competitorIds = new Set((job.research?.outliers ?? []).filter((o) => o.source.startsWith("competitor")).map((o) => o.channelId));
@@ -99,34 +115,39 @@ async function findCreators(job: Job, notes: string[]): Promise<Creator[]> {
   if (!channels.length) return [];
 
   // Every video of theirs we found, so the message can name their real work.
+  const theirVideos = (id: string) => videos.filter((v) => v.channelId === id).slice(0, 3);
   const theirs = (id: string) =>
-    videos
-      .filter((v) => v.channelId === id)
-      .slice(0, 3)
-      .map((v) => `"${v.title}" (${v.views} views)`)
+    theirVideos(id)
+      .map((v, n) => `(${String.fromCharCode(97 + n)}) "${v.title}" (${v.views} views)`)
       .join(", ");
-  const list = channels
-    .slice(0, 30)
-    .map((c, i) => `[${i}] ${c.title} | ${c.subscribers ?? "hidden"} subscribers | videos: ${theirs(c.id)}\nAbout: ${c.description.replace(/\s+/g, " ").slice(0, 600)}`)
+  // Who the founder can actually email: in their bio, else on a site the bio links to.
+  const shortlist = channels.slice(0, 30);
+  const emails = await Promise.all(shortlist.map(async (c) => findEmails(c.description)[0] ?? (await bioEmail(c.description))));
+  const list = shortlist
+    .map(
+      (c, i) =>
+        `[${i}] ${c.title} | ${c.subscribers ?? "hidden"} subscribers | email: ${emails[i] ? "listed" : "none"} | videos: ${theirs(c.id)}\nAbout: ${c.description.replace(/\s+/g, " ").slice(0, 600)}`,
+    )
     .join("\n\n");
 
   const res = await ai.models.generateContent({
     model: MODEL,
     contents: `${describe(job)}
 
-These YouTube channels made popular videos about this product's niche. Pick up to ${MAX_CREATORS} the founder should reach out to: independent creators whose viewers are this product's buyers, who could plausibly try it and show it to their audience. Skip brand or company channels, competitors, news, clip or reupload channels, and channels whose video only matched a search word by accident.
+These YouTube channels made popular videos about this product's niche. Pick up to ${MAX_CREATORS} the founder should reach out to: independent creators whose viewers are this product's buyers, who could plausibly try it and show it to their audience. Skip brand or company channels, competitors, news, clip or reupload channels, and channels whose video only matched a search word by accident. When two channels fit about as well, pick the one with an email listed: those are the ones the founder can actually reach.
 
 ${list}
 
 For each pick:
 - i: its number.
-- why: one sentence on why they fit, naming their video and its views.
+- video: the letter of their video that best shows the fit, like "a".
+- why: one sentence on why they fit, naming that video and its views.
 - subject: an email subject under 7 words, plain like a note from a person and about them, not a pitch line.
 - dm: an email to them, 70 to 120 words. Start with "Hey <their first name if the About shows it, else the channel name>,". You found them through their videos, so the details come from their videos and About.
 
 ${VOICE}
 
-Return JSON only: {"picks": [{"i": number, "why": string, "subject": string, "dm": string}]}`,
+Return JSON only: {"picks": [{"i": number, "video": string, "why": string, "subject": string, "dm": string}]}`,
     config: {
       responseMimeType: "application/json",
       responseJsonSchema: z.toJSONSchema(Picked),
@@ -137,16 +158,16 @@ Return JSON only: {"picks": [{"i": number, "why": string, "subject": string, "dm
 
   const out: Creator[] = [];
   for (const p of picks.slice(0, MAX_CREATORS)) {
-    const c = channels[p.i];
+    const c = shortlist[p.i];
     if (!c || out.some((o) => o.name === c.title)) continue;
-    const v = best.get(c.id)!;
+    const v = theirVideos(c.id)[p.video.trim().toLowerCase().charCodeAt(0) - 97] ?? best.get(c.id)!;
     out.push({
       name: c.title,
       url: c.handle ? `https://www.youtube.com/${c.handle}` : `https://www.youtube.com/channel/${c.id}`,
       thumbnail: c.thumbnail,
       subscribers: c.subscribers,
       video: { title: v.title, url: `https://www.youtube.com/watch?v=${v.id}`, views: v.views },
-      email: findEmails(c.description)[0] ?? null,
+      email: emails[p.i] ?? null,
       why: p.why,
       subject: p.subject,
       dm: noLinks(p.dm),

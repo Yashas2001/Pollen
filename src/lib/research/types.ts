@@ -57,8 +57,13 @@ export type Outlier = {
   recipe?: Recipe;
 };
 
+export type PoolVideo = { id: string; title: string; channelId: string; channelTitle: string; views: number };
+
 export type Research = {
   niche: Niche | null;
   outliers: Outlier[]; // best first; the watched ones carry a recipe
+  // Niche channels research already looked at (not competitors), with their most-watched
+  // recent videos. Outreach picks creators from these instead of searching again.
+  pool?: PoolVideo[];
   notes: string[]; // what went wrong, shown nowhere, useful in logs
 };

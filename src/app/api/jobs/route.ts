@@ -3,6 +3,7 @@ import { writeFile } from "node:fs/promises";
 import path from "node:path";
 import { createJob, jobDir } from "@/lib/jobs";
 import { getUser, recordUser } from "@/lib/auth";
+import { recordLimitHit, runAllowance, withRunLock } from "@/lib/limits";
 import { runJob } from "@/lib/pipeline";
 
 export const maxDuration = 300;
@@ -43,11 +44,19 @@ export async function POST(request: Request) {
     return Response.json({ error: "Add photos or videos only." }, { status: 400 });
   }
 
-  const job = await createJob(url, goal?.trim().slice(0, 200) || "I need my first 50 users", {
-    uid: user.uid,
-    email: user.email,
-    name: user.name,
+  const job = await withRunLock(async () => {
+    const allowed = await runAllowance(user);
+    if (allowed.message) {
+      void recordLimitHit(user, allowed.left === 0 ? "used" : "full").catch(() => {});
+      return allowed.message;
+    }
+    return createJob(url, goal?.trim().slice(0, 200) || "I need my first 50 users", {
+      uid: user.uid,
+      email: user.email,
+      name: user.name,
+    });
   });
+  if (typeof job === "string") return Response.json({ error: job }, { status: 429 });
   for (const c of clips) {
     const ext = (path.extname(c.file.name) || ".mp4").toLowerCase().replace(/[^.a-z0-9]/g, "");
     await writeFile(path.join(jobDir(job.id), `upload-${c.name}${ext}`), Buffer.from(await c.file.arrayBuffer()));

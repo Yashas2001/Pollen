@@ -1,8 +1,9 @@
 // YouTube lookups for outreach: longer niche videos and channel details.
 // Same official API and key as research.
 
+import { cachedSearch } from "@/lib/research/youtube";
+
 const API = "https://www.googleapis.com/youtube/v3";
-const searchCache = new Map<string, string[]>();
 
 async function yt<T>(path: string, params: Record<string, string>): Promise<T> {
   const url = new URL(`${API}/${path}`);
@@ -16,9 +17,10 @@ async function yt<T>(path: string, params: Record<string, string>): Promise<T> {
 
 // Longer videos (4-20 min: reviews, tutorials) for a phrase in the last year. 100 units.
 export async function searchVideos(query: string, max = 25): Promise<string[]> {
-  const key = `long|${query.toLowerCase()}|${max}`;
-  const hit = searchCache.get(key);
-  if (hit) return hit;
+  return cachedSearch(`long|${query.toLowerCase()}|${max}`, () => runSearchVideos(query, max));
+}
+
+async function runSearchVideos(query: string, max: number): Promise<string[]> {
   const since = new Date(Date.now() - 365 * 864e5).toISOString();
   const data = await yt<{ items: { id: { videoId: string } }[] }>("search", {
     part: "id",
@@ -29,9 +31,7 @@ export async function searchVideos(query: string, max = 25): Promise<string[]> {
     maxResults: String(max),
     q: query,
   });
-  const ids = data.items.map((i) => i.id.videoId).filter(Boolean);
-  searchCache.set(key, ids);
-  return ids;
+  return data.items.map((i) => i.id.videoId).filter(Boolean);
 }
 
 export type Channel = {

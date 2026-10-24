@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { authFetch } from "@/lib/firebase";
 
 const GOALS = ["My first 50 users", "First 10 paying customers", "More signups", "Waitlist sign-ups", "More sales"];
@@ -18,6 +18,15 @@ export function LinkForm() {
   const [error, setError] = useState<string | null>(null);
   const urlBox = useRef<HTMLInputElement>(null);
   const goalBox = useRef<HTMLInputElement>(null);
+  // Free runs left (null = no limit) and today's cap, so nobody fills all three steps for nothing.
+  const [allowance, setAllowance] = useState<{ left: number | null; full: boolean; message: string | null } | null>(null);
+
+  useEffect(() => {
+    authFetch("/api/me")
+      .then((r) => (r.ok ? r.json() : null))
+      .then(setAllowance)
+      .catch(() => {});
+  }, []);
 
   // Read the box itself, not typing events: autofill and text typed before the page
   // finished loading never fire them.
@@ -47,6 +56,17 @@ export function LinkForm() {
     files.forEach((f) => body.append("files", f));
     const res = await authFetch("/api/jobs", { method: "POST", body }).catch(() => null);
     const data = res ? ((await res.json().catch(() => ({}))) as { id?: string; error?: string }) : {};
+    if (res?.status === 429) {
+      // Hit a limit while they were filling it in: show the same screen as on arrival.
+      const fresh = await authFetch("/api/me")
+        .then((r) => (r.ok ? r.json() : null))
+        .catch(() => null);
+      if (fresh?.message) {
+        setAllowance(fresh);
+        setBusy(false);
+        return;
+      }
+    }
     if (!res?.ok || !data.id) {
       setError(data.error ?? "Something went wrong. Try again.");
       setBusy(false);
@@ -54,6 +74,14 @@ export function LinkForm() {
     }
     router.push(`/v/${data.id}`);
   }
+
+  if (allowance?.message)
+    return (
+      <div className="flex w-full max-w-xl flex-col gap-3">
+        <h1 className="text-3xl font-bold tracking-tight sm:text-4xl">{allowance.left === 0 ? "You've used your free runs" : "Pollen is full for today"}</h1>
+        <p className="text-lg text-black/60">{allowance.message}</p>
+      </div>
+    );
 
   return (
     <div className="flex w-full max-w-xl flex-col gap-5">
@@ -179,6 +207,9 @@ export function LinkForm() {
             {busy ? (files.length ? "Uploading..." : "Starting...") : "Get me customers"}
           </button>
           {!files.length ? <p className="-mt-2 text-sm text-black/45">No files? That&apos;s fine, we&apos;ll use your website.</p> : null}
+          {allowance?.left ? (
+            <p className="-mt-2 text-sm text-black/45">{allowance.left === 1 ? "This is your last free run." : `You have ${allowance.left} free runs.`}</p>
+          ) : null}
         </div>
       ) : null}
 

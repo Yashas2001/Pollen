@@ -14,6 +14,14 @@ export function findEmails(text: string): string[] {
   return [...out];
 }
 
+// Sites a creator lists in their bio that can carry a contact email: their own site or
+// a link-in-bio page. Social profiles, shops and affiliate links never do.
+const NOT_CONTACT = /(youtube\.com|youtu\.be|instagram\.com|tiktok\.com|twitter\.com|x\.com|facebook\.com|threads\.net|amazon\.|amzn\.|geni\.us|bit\.ly|patreon\.com|discord\.(gg|com)|spotify\.com|apple\.com|twitch\.tv|reddit\.com|t\.me|whatsapp)/i;
+export function bioSites(text: string): string[] {
+  const urls = (text.match(/https?:\/\/[^\s)>\]"']+/gi) ?? []).map((u) => u.replace(/[.,;!?]+$/, ""));
+  return [...new Set(urls)].filter((u) => !NOT_CONTACT.test(host(u)));
+}
+
 const host = (u: string) => {
   try {
     return new URL(u).hostname.replace(/^www\./, "");

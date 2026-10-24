@@ -41,6 +41,25 @@ Use Google Search. Return JSON only, matching:
   return parseJson(Niche, res.text);
 }
 
+// Independent YouTube creators this product's buyers already watch, found with
+// Google Search. Replaces YouTube's own search (100 quota units a call): each
+// handle then costs ~3 units to check, and a handle that doesn't exist is dropped.
+export async function findNicheChannels(niche: Niche): Promise<string[]> {
+  const prompt = `Niche: ${niche.niche}. Audience: ${niche.audience}.
+Competitors (leave these out): ${niche.competitors.map((c) => c.name).join(", ") || "none"}.
+
+Use Google Search. Find 12 YouTube channels whose videos are about this kind of product itself: reviews, comparisons, how-tos, showing how they use it. Not channels about the wider hobby or topic around it (for running shoes: shoe reviewers, not race coverage). Independent creators who post regularly: some who make Shorts, some who make longer reviews or tutorials. Mostly small and mid-size, a few thousand to a few hundred thousand subscribers. No brand or company channels, no competitors, no news channels.
+Only include a channel whose exact handle (like "@name") you saw in search results. Never guess a handle.
+
+Return JSON only: {"handles": ["@name", ...]}`;
+  const res = await ai.models.generateContent({
+    model: MODEL,
+    contents: prompt,
+    config: { tools: [{ googleSearch: {} }] },
+  });
+  return parseJson(z.object({ handles: z.array(z.string()) }), res.text).handles.map((h) => h.trim()).filter((h) => /^@?[\w.-]+$/.test(h));
+}
+
 // Watches one winning Short and writes down its structure.
 export async function watchRecipe(videoUrl: string, title: string): Promise<Recipe> {
   const prompt = `This short video ("${title}") performed far above its channel's usual views. Watch it and write down its recipe: the structure someone could reuse for a different product. Describe structure, not the specific content.
