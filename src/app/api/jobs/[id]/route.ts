@@ -6,7 +6,9 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
   if (!job) return Response.json({ error: "Not found" }, { status: 404 });
   // A render a restart cut off would say "Making your MP4..." forever; offer to try again instead.
   job.videos.forEach((v, i) => {
-    if (v.render.status === "rendering" && !activeRenders.has(`${id}/${i}`)) v.render = { status: "failed", error: "Interrupted" };
+    if (v.render.status !== "rendering") return;
+    const progress = activeRenders.get(`${id}/${i}`);
+    v.render = progress === undefined ? { status: "failed", error: "Interrupted" } : { ...v.render, progress };
   });
   return Response.json(job, { headers: { "Cache-Control": "no-store" } });
 }

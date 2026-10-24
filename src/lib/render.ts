@@ -30,7 +30,7 @@ let queue: Promise<unknown> = Promise.resolve();
 
 export function renderVideo(id: string, index: number): Promise<void> {
   const key = `${id}/${index}`;
-  activeRenders.add(key);
+  if (!activeRenders.has(key)) activeRenders.set(key, 0);
   const run = async () => {
     const job = await getJob(id);
     const video = job?.videos[index];
@@ -47,6 +47,7 @@ export function renderVideo(id: string, index: number): Promise<void> {
         outputLocation: path.join(jobDir(id), file),
         inputProps,
         port: REMOTION_PORT,
+        onProgress: ({ progress }) => void activeRenders.set(key, Math.round(progress * 100)),
       });
       await updateJob(id, (j) => void (j.videos[index].render = { status: "done", file }));
     } catch (err) {

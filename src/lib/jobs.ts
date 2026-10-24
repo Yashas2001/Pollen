@@ -15,7 +15,7 @@ export type JobStep = "queued" | "reading_site" | "researching" | "writing" | "v
 
 export type JobVideo = {
   props: VideoProps;
-  render: { status: "none" | "rendering" | "done" | "failed"; file?: string; error?: string };
+  render: { status: "none" | "rendering" | "done" | "failed"; file?: string; error?: string; progress?: number }; // progress: 0-100, only while rendering
 };
 
 export type Job = {
@@ -95,9 +95,10 @@ export function updateJob(id: string, change: (job: Job) => void): Promise<Job> 
   return run;
 }
 
-// Renders ("<id>/<index>") queued or running in this server. job.json saying "rendering" for one
-// that isn't here means a restart cut it off. On globalThis because Next can load this module once per route.
-export const activeRenders: Set<string> = ((globalThis as { __activeRenders?: Set<string> }).__activeRenders ??= new Set());
+// Renders ("<id>/<index>" -> percent done) queued or running in this server; kept in memory so
+// progress never touches job.json. job.json saying "rendering" for one that isn't here means a
+// restart cut it off. On globalThis because Next can load this module once per route.
+export const activeRenders: Map<string, number> = ((globalThis as { __activeRenders?: Map<string, number> }).__activeRenders ??= new Map());
 
 // Every job, newest first. Fine for an event's worth of jobs; a DB later.
 export async function listJobs(): Promise<Job[]> {

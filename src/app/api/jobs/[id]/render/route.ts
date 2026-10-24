@@ -17,7 +17,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
   if (job.videos[index].render.status !== "done" && !activeRenders.has(key)) {
     // Say "rendering" before answering: the page reloads the job right away and only keeps
     // polling while something is rendering, so a late status left the button looking dead.
-    activeRenders.add(key);
+    activeRenders.set(key, 0);
     try {
       await updateJob(id, (j) => void (j.videos[index].render = { status: "rendering" }));
     } catch (e) {

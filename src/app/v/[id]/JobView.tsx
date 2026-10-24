@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { Player, Thumbnail } from "@remotion/player";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { SocialVideo, totalFrames } from "@/remotion/SocialVideo";
 import { FPS, HEIGHT, WIDTH } from "@/remotion/schema";
 import type { Job, JobVideo } from "@/lib/jobs";
@@ -384,7 +384,17 @@ function VideoPair({
   const [copied, setCopied] = useState(false);
   const caption = `${props.script.postCaption}\n\n${props.script.hashtags.map((h) => `#${h}`).join(" ")}`;
 
+  // Clicked Download: start the file as soon as the MP4 is ready, no second click.
+  const wanted = useRef(false);
+  const fileUrl = render.status === "done" && render.file ? `/api/files/${jobId}/${render.file}?download` : null;
+  useEffect(() => {
+    if (!wanted.current || !fileUrl) return;
+    wanted.current = false;
+    window.location.assign(fileUrl); // an attachment response downloads without leaving the page
+  }, [fileUrl]);
+
   async function startRender() {
+    wanted.current = true;
     await fetch(`/api/jobs/${jobId}/render`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -485,8 +495,8 @@ function VideoPair({
           <p className="mt-2 whitespace-pre-line rounded-2xl bg-black/5 p-4 text-sm">{caption}</p>
         </div>
         <div className="flex flex-col gap-3 md:pt-6">
-          {render.status === "done" && render.file ? (
-            <a href={`/api/files/${jobId}/${render.file}?download`} className="rounded-2xl bg-black px-5 py-3 text-center font-semibold text-white">
+          {fileUrl ? (
+            <a href={fileUrl} className="rounded-2xl bg-black px-5 py-3 text-center font-semibold text-white">
               Download video
             </a>
           ) : (
@@ -495,7 +505,7 @@ function VideoPair({
               disabled={render.status === "rendering"}
               className="rounded-2xl bg-black px-5 py-3 font-semibold text-white disabled:opacity-50"
             >
-              {render.status === "rendering" ? "Making your MP4..." : render.status === "failed" ? "Try download again" : "Download video"}
+              {render.status === "rendering" ? `Making your MP4... ${render.progress ?? 0}%` : render.status === "failed" ? "Try download again" : "Download video"}
             </button>
           )}
           <button
