@@ -1,6 +1,7 @@
 import { GoogleGenAI, ThinkingLevel } from "@google/genai";
 import { z } from "zod";
 import { makeLink } from "@/lib/links";
+import { coach } from "./coach";
 import { hackerNews, linkedin, reddit, redditFromGoogle, x, type Candidate } from "./sources";
 import type { Person, PeopleBrief } from "./types";
 
@@ -112,7 +113,7 @@ ${list}`,
       .filter((r, k, all) => all.findIndex((o) => o.i === r.i) === k)
       .slice(0, 10);
 
-    return await Promise.all(
+    const drafted: Person[] = await Promise.all(
       best.map(async (r) => {
         const c = candidates[r.i];
         const link = await makeLink(jobId, { channel: c.platform, label: `Reply to ${c.author} on ${PLATFORM_NAME[c.platform]}`, target: brief.url });
@@ -122,6 +123,7 @@ ${list}`,
         return { ...c, score: r.score, why: r.why, reply, replyUrl, linkCode: link.code || undefined };
       }),
     );
+    return await coach(drafted, new URL(brief.url).hostname.replace(/^www\./, ""));
   } catch (e) {
     console.error("[people] failed", e);
     return [];

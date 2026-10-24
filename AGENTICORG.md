@@ -2,6 +2,8 @@
 
 For Suhas and Rakshith. Proposal from Yashas (People finder).
 
+**Status: built.** The agent exists in our tenant and is wired into the People finder (`src/lib/people/coach.ts`). Set `AGENTICORG_BASE_URL`, `AGENTICORG_API_KEY` and `AGENTICORG_REPLY_COACH_ID` in `.env`; without them the finder skips the check and keeps its own drafts. Each check takes about 4 s and costs about $0.0005, and all checks run in parallel. Runs come back `hitl_triggered` (AgenticOrg queues them for review) with the answer already in `output`; we use it, because the founder reviews every reply before posting. Known trade-off: the agent usually removes the product link, so those replies don't carry a tracked link for the scoreboard.
+
 ## The idea
 
 The hackathon needs an agent from AgenticOrg (https://agenticorg.hackathon.pinelabs.com). Proposal: a custom agent, **Reply Coach**, that checks every reply the People finder drafts before the founder sees it.
@@ -79,9 +81,4 @@ Once 1 and 2 are done, wiring it into the People finder is about 30 minutes.
 
 ## Also for Suhas: a bug in `jobs.ts`
 
-`updateJob` isn't safe when two updates overlap, and the People finder runs beside the videos:
-
-1. Every write uses the same `job.json.tmp`. When two overlap, one rename fails with ENOENT and **the whole job fails**. This happened on a real cubix.design run.
-2. Updates can overwrite each other. On another run, `peopleStatus: "finding"` was lost, so the results page stopped polling and the People cards only appeared after a manual refresh.
-
-Fix: in `saveJob`, give each write its own temp name (e.g. `job.json.<uuid>.tmp`), and run `updateJob` calls for the same job one at a time by chaining each on the previous one's promise.
+See [FIX-jobs-ts.md](FIX-jobs-ts.md): overlapping job updates crash jobs and lose writes. It has the fix and a test.

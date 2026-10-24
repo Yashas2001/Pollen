@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import type { Job } from "@/lib/jobs";
 import type { Person, Platform } from "@/lib/people/types";
 
@@ -11,6 +11,8 @@ const PLATFORM: Record<Platform, { name: string; badge: string }> = {
   x: { name: "X", badge: "bg-black/10 text-black" },
 };
 
+const finished = (job: Job) => job.peopleStatus === "done" || job.peopleStatus === "failed";
+
 function ago(iso: string) {
   const mins = Math.max(1, Math.round((Date.now() - new Date(iso).getTime()) / 60_000));
   if (mins < 60) return `${mins} min ago`;
@@ -19,7 +21,19 @@ function ago(iso: string) {
 }
 
 // People asking for this product right now, with a reply ready for each. Nothing is posted for them.
-export function People({ job }: { job: Job }) {
+export function People({ job: fromPage }: { job: Job }) {
+  // The page stops polling once the videos are ready, and the people finder can finish later
+  // (or its "finding" status can be overwritten), so this section keeps polling until it's done.
+  const [latest, setLatest] = useState<Job | null>(null);
+  const job = latest && latest.id === fromPage.id && !finished(fromPage) ? latest : fromPage;
+  useEffect(() => {
+    if (finished(job)) return;
+    const t = setInterval(async () => {
+      const res = await fetch(`/api/jobs/${job.id}`, { cache: "no-store" }).catch(() => null);
+      if (res?.ok) setLatest((await res.json()) as Job);
+    }, 2000);
+    return () => clearInterval(t);
+  }, [job]);
   const people = job.people ?? [];
   return (
     <section className="mt-10 rounded-3xl bg-white p-6 shadow-sm">
@@ -58,6 +72,15 @@ function PersonCard({ person }: { person: Person }) {
         <span className="font-semibold">Why: </span>
         {person.why}
       </p>
+      {person.coach ? (
+        <p className="rounded-2xl bg-emerald-50 p-3 text-sm text-emerald-900">
+          <span className="font-semibold">
+            {person.coach.verdict === "post" ? "Safe to post" : "Edited for this community"}
+          </span>
+          <span className="text-emerald-900/70"> · checked by AgenticOrg Reply Coach</span>
+          {person.coach.reason ? <span className="mt-1 block">{person.coach.reason}</span> : null}
+        </p>
+      ) : null}
       <label className="flex flex-col gap-1 text-sm font-semibold">
         Your reply
         <textarea

@@ -25,4 +25,5 @@ export type Person = {
   reply: string; // helpful human reply draft, includes the tracked link
   replyUrl?: string; // one-click reply (X intent link); else the founder opens url and pastes
   linkCode?: string; // tracked link code from makeLink(), for the scoreboard
+  coach?: { verdict: "post" | "rewrite"; reason: string }; // AgenticOrg Reply Coach's check of the reply
 };
