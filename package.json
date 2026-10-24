@@ -23,7 +23,7 @@
     "@remotion/player": "4.0.538",
     "@remotion/renderer": "4.0.538",
     "@remotion/transitions": "4.0.538",
-    "firebase": "^12.4.0",
+    "firebase": "^12.19.0",
     "jose": "^6.1.0",
     "next": "16.4.3",
     "openai": "7.43.0",

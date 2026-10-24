@@ -97,16 +97,21 @@ export function StartButton() {
   }
 
   return (
-    <div className="flex flex-col items-center gap-2">
+    <div className="flex flex-col items-center gap-2.5">
       <button
         onClick={() => void start()}
         disabled={busy}
-        className="h-14 rounded-2xl bg-black px-10 text-lg font-semibold text-white disabled:opacity-60"
+        className="group relative inline-flex items-center justify-center gap-2 h-14 rounded-2xl bg-black px-10 text-lg font-semibold text-white shadow-[0_6px_20px_rgba(0,0,0,0.14)] hover:shadow-[0_12px_32px_rgba(0,0,0,0.22)] hover:-translate-y-0.5 active:translate-y-0 active:scale-[0.98] transition-all duration-200 cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed disabled:hover:translate-y-0 disabled:hover:shadow-none"
       >
-        {busy ? "Signing in..." : "Start free"}
+        <span>{busy ? "Signing in..." : "Start free"}</span>
+        {!busy && (
+          <span className="inline-block transition-transform duration-200 group-hover:translate-x-1 font-mono text-sm opacity-70">
+            →
+          </span>
+        )}
       </button>
-      <p className="text-sm text-black/50">Sign in with Google. Takes one tap.</p>
-      {error ? <p className="text-red-600">{error}</p> : null}
+      <p className="text-sm font-medium text-black/50">Sign in with Google. Takes one tap.</p>
+      {error ? <p className="text-sm font-medium text-red-600 mt-1">{error}</p> : null}
     </div>
   );
 }
