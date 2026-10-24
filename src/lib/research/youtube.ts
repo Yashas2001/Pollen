@@ -98,7 +98,43 @@ export async function searchShorts(query: string, max = 15): Promise<string[]> {
   return cachedSearch(`short|${query.toLowerCase()}|${max}`, () => runSearchShorts(query, max));
 }
 
+// When the API search is out of quota (search has its own small daily limit), read
+// YouTube's own search page instead: same results people see, no quota. Views are
+// checked after with videos.list (1 unit), so order here doesn't matter.
+const PAGE_FILTER = { shorts: "EgIQCQ%3D%3D", medium: "EgIYAw%3D%3D" }; // Shorts / 4-20 min
+
+export async function pageSearch(query: string, kind: keyof typeof PAGE_FILTER, max: number): Promise<string[]> {
+  const url = `https://www.youtube.com/results?search_query=${encodeURIComponent(query)}&sp=${PAGE_FILTER[kind]}`;
+  const res = await fetch(url, {
+    headers: {
+      "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124 Safari/537.36",
+      "Accept-Language": "en-US,en;q=0.9",
+      Cookie: "SOCS=CAI; CONSENT=YES+1", // skip the EU cookie wall
+    },
+    signal: AbortSignal.timeout(20_000),
+  });
+  const html = await res.text();
+  const re = kind === "shorts" ? /\/shorts\/([A-Za-z0-9_-]{11})/g : /"videoId":"([A-Za-z0-9_-]{11})"/g;
+  const ids = [...new Set([...html.matchAll(re)].map((m) => m[1]))].slice(0, max);
+  if (!ids.length) throw new Error(`YouTube page search: no results (${res.status})`);
+  return ids;
+}
+
+// API first (sorted by views), the search page if that fails.
+export async function withPageFallback(query: string, kind: keyof typeof PAGE_FILTER, max: number, api: () => Promise<string[]>) {
+  try {
+    return await api();
+  } catch (e) {
+    console.warn(`[youtube] ${(e as Error).message.slice(0, 120)}; using search page`);
+    return pageSearch(query, kind, max);
+  }
+}
+
 async function runSearchShorts(query: string, max: number): Promise<string[]> {
+  return withPageFallback(query, "shorts", max, () => apiSearchShorts(query, max));
+}
+
+async function apiSearchShorts(query: string, max: number): Promise<string[]> {
   const since = new Date(Date.now() - 180 * 864e5).toISOString();
   const data = await yt<{ items: { id: { videoId: string } }[] }>("search", {
     part: "id",
