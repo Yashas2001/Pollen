@@ -139,10 +139,16 @@ export async function runJob(id: string, url: string) {
       }),
     );
 
+    // Readable profile links: /<brand>/tiktok, /<brand>/instagram, /<brand>/youtube.
+    const labels = new URL(site.url).hostname.split(".").slice(0, -1);
+    const brand = (labels.filter((l) => !/^(www|store|shop|app|web|get|try|go|my|en|m)$/.test(l)).at(-1) ?? labels.at(-1) ?? "brand")
+      .toLowerCase()
+      .replace(/[^a-z0-9-]/g, "");
     const bioLinks = await Promise.all(
       (["tiktok", "reels", "shorts"] as const).map(async (channel) => {
         const label = { tiktok: "TikTok link in bio", reels: "Instagram link in bio", shorts: "YouTube link in bio" }[channel];
-        const { url: link } = await makeLink(id, { channel, label, target: site.url }).catch(() => ({ url: site.url }));
+        const slug = `${brand}/${{ tiktok: "tiktok", reels: "instagram", shorts: "youtube" }[channel]}`;
+        const { url: link } = await makeLink(id, { channel, label, target: site.url, slug }).catch(() => ({ url: site.url }));
         return { channel, url: link };
       }),
     );

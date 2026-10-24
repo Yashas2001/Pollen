@@ -52,25 +52,66 @@ function serial<T>(task: () => Promise<T>): Promise<T> {
   return run;
 }
 
+// slug: a readable code like "cubix/tiktok" (served at /cubix/tiktok); taken by another job -> "cubix-2/tiktok".
+// Without one, a random code served at /r/<code>.
 export async function makeLink(
   jobId: string,
-  link: { channel: LinkChannel; label: string; target: string },
+  link: { channel: LinkChannel; label: string; target: string; slug?: string },
 ): Promise<{ code: string; url: string }> {
+  const { slug, ...fields } = link;
   const code = await serial(async () => {
     const links = await readLinks();
     // Same job + same label -> same link.
     const existing = Object.values(links).find((l) => l.jobId === jobId && l.label === link.label);
     if (existing) return existing.code;
     let code = newCode();
+    if (slug) {
+      const [brand, rest] = slug.split("/");
+      code = slug;
+      for (let n = 2; links[code]; n++) code = `${brand}-${n}/${rest}`;
+    }
     while (links[code]) code = newCode();
-    links[code] = { code, jobId, ...link, createdAt: new Date().toISOString() };
+    links[code] = { code, jobId, ...fields, createdAt: new Date().toISOString() };
     await mkdir(DATA_ROOT, { recursive: true });
     const tmp = `${LINKS_FILE}.${newCode()}.tmp`;
     await writeFile(tmp, JSON.stringify(links, null, 2));
     await rename(tmp, LINKS_FILE);
     return code;
   });
-  return { code, url: `${process.env.APP_URL}/r/${code}` };
+  return { code, url: linkUrl(code) };
+}
+
+export const linkUrl = (code: string) => `${process.env.APP_URL}/${code.includes("/") ? code : `r/${code}`}`;
+
+// Link previews (X, WhatsApp, Slack, LinkedIn...) and crawlers still get redirected, just not counted.
+const BOTS = /bot|crawl|spider|preview|facebookexternalhit|Twitterbot|Slackbot|LinkedInBot|WhatsApp|TelegramBot|Discordbot|SkypeUriPreview|Googlebot|bingbot/i;
+
+// A tracked link was opened: log the click, then send them to the product with UTM tags.
+export async function followLink(request: Request, code: string): Promise<Response> {
+  const link = await getLink(code).catch(() => null);
+  if (!link) return Response.redirect(new URL("/", request.url), 302);
+
+  const ua = request.headers.get("user-agent");
+  if (!ua || !BOTS.test(ua)) {
+    try {
+      const country = request.headers.get("cf-ipcountry") ?? request.headers.get("x-vercel-ip-country") ?? undefined;
+      await logClick({ code, jobId: link.jobId, at: new Date().toISOString(), referrer: request.headers.get("referer"), ua, country });
+    } catch (err) {
+      // Never break the redirect over a lost click.
+      console.error("[links] click log failed", err);
+    }
+  }
+
+  let target: URL;
+  try {
+    target = new URL(link.target);
+  } catch {
+    return Response.redirect(new URL("/", request.url), 302);
+  }
+  target.searchParams.set("utm_source", "pollen");
+  target.searchParams.set("utm_medium", link.channel);
+  target.searchParams.set("utm_campaign", code.replace("/", "-"));
+  return new Response(null, { status: 302, headers: { Location: target.toString(), "Cache-Control": "no-store" } });
 }
 
 export async function getLink(code: string): Promise<TrackedLink | null> {

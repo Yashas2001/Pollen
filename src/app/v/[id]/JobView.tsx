@@ -360,7 +360,7 @@ function VideosTab({ job, outliers, onRender }: { job: Job; outliers: Outlier[];
         ))}
       </div>
       <VideoPair key={i} jobId={job.id} domain={job.url.replace(/^https?:\/\//, "").replace(/\/.*$/, "")} index={i} video={video} basedOn={outliers[video.props.script.basedOn] ?? null} onRender={onRender} />
-      {job.bioLinks?.length ? <BioLinks links={job.bioLinks} /> : null}
+      {job.bioLinks?.length ? <BioLinks links={job.bioLinks} site={job.url} /> : null}
     </div>
   );
 }
@@ -521,8 +521,20 @@ const clock = (sec: number) => `${Math.floor(sec / 60)}:${String(Math.round(sec 
 const BIO_NAME = { tiktok: "TikTok", reels: "Instagram", shorts: "YouTube" } as const;
 
 // Captions on TikTok / Reels / Shorts aren't clickable, so clicks come through the bio link.
-function BioLinks({ links }: { links: NonNullable<Job["bioLinks"]> }) {
+function BioLinks({ links, site }: { links: NonNullable<Job["bioLinks"]>; site: string }) {
   const [copied, setCopied] = useState<string | null>(null);
+  const copy = (key: string, text: string) => {
+    void navigator.clipboard.writeText(text);
+    setCopied(key);
+    setTimeout(() => setCopied(null), 1500);
+  };
+  // Their own site with a ref tag: looks native, but clicks only show in their own analytics.
+  const plain = (channel: string) => {
+    const u = new URL(/^https?:\/\//.test(site) ? site : `https://${site}`);
+    u.searchParams.set("ref", BIO_NAME[channel as keyof typeof BIO_NAME].toLowerCase());
+    return u.toString();
+  };
+  const show = (u: string) => u.replace(/^https?:\/\//, "");
   return (
     <section className="rounded-3xl bg-white p-6 shadow-sm">
       <h2 className="text-xl font-bold">Your profile link</h2>
@@ -532,19 +544,21 @@ function BioLinks({ links }: { links: NonNullable<Job["bioLinks"]> }) {
       </p>
       <div className="flex flex-col gap-2">
         {links.map((l) => (
-          <div key={l.channel} className="flex flex-wrap items-center gap-3 rounded-2xl bg-black/5 p-3">
-            <span className="w-24 font-semibold">{BIO_NAME[l.channel]}</span>
-            <span className="min-w-0 flex-1 truncate text-sm text-black/60">{l.url}</span>
-            <button
-              onClick={() => {
-                void navigator.clipboard.writeText(l.url);
-                setCopied(l.channel);
-                setTimeout(() => setCopied(null), 1500);
-              }}
-              className="rounded-xl bg-black px-4 py-2 text-sm font-semibold text-white"
-            >
-              {copied === l.channel ? "Copied" : "Copy"}
-            </button>
+          <div key={l.channel} className="rounded-2xl bg-black/5 p-3">
+            <div className="flex flex-wrap items-center gap-3">
+              <span className="w-24 font-semibold">{BIO_NAME[l.channel]}</span>
+              <span className="min-w-0 flex-1 truncate font-medium">{show(l.url)}</span>
+              <button onClick={() => copy(l.channel, l.url)} className="rounded-xl bg-black px-4 py-2 text-sm font-semibold text-white">
+                {copied === l.channel ? "Copied" : "Copy"}
+              </button>
+            </div>
+            <p className="mt-2 flex flex-wrap items-center gap-x-2 text-xs text-black/50 sm:pl-[108px]">
+              <span>Rather use your own site?</span>
+              <button onClick={() => copy(`${l.channel}-plain`, plain(l.channel))} className="font-semibold text-black/70 underline">
+                {copied === `${l.channel}-plain` ? "Copied" : `Copy ${show(plain(l.channel))}`}
+              </button>
+              <span>(clicks then show in your own analytics, not here)</span>
+            </p>
           </div>
         ))}
       </div>
