@@ -8,7 +8,7 @@ const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY, httpOptions: { 
 const MODEL = "gemini-3.8-flash";
 // Per-source share of the candidates sent for scoring, so one noisy source can't crowd out the rest.
 const BATCH = 15;
-const CAP: Record<string, number> = { google_reddit: 15, linkedin: 6, x: 8, hn: 6, reddit: 10 };
+const CAP: Record<string, number> = { google_reddit: 20, x: 15, reddit: 15, linkedin: 5, hn: 5 }; // 60 to Gemini
 
 const Search = z.object({
   phrases: z.array(z.string()),
@@ -63,7 +63,7 @@ We want to find people online who are asking for what this product does, right n
       reddit: reddit(search.subreddits, search.terms),
       hn: hackerNews(search.keywords),
       linkedin: linkedin(search.linkedin),
-      x: x(search.phrases),
+      x: x(search.phrases, search.terms),
     };
     const settled = await Promise.allSettled(Object.values(sources));
     const found: Candidate[] = [];
