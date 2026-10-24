@@ -53,7 +53,7 @@ export async function runJob(id: string, url: string) {
     // Every phrase of every talking clip gets one number for the writer.
     const spoken: Spoken[] = [];
     footage.talks.forEach(({ clip, phrases }, c) => {
-      assets.push({ url: fileUrl(id, clip.file), kind: "talk", width: clip.width, height: clip.height, durationSec: clip.durationSec, label: clip.label });
+      assets.push({ url: fileUrl(id, clip.file), kind: "talk", width: clip.width, height: clip.height, durationSec: clip.durationSec, label: clip.label, captions: clip.captions });
       phrases.forEach((phrase, i) => spoken.push({ clip, assetIndex: assets.length - 1, clipNo: c, phrases, i, phrase }));
     });
     const talk: TalkInfo = spoken.length
@@ -99,6 +99,7 @@ export async function runJob(id: string, url: string) {
       try {
         const people = await findPeople(id, {
           url: site.url,
+          name: plan.brand.name,
           ...plan.brief,
           niche: found.niche?.niche ?? null,
           audience: found.niche?.audience ?? null,
@@ -198,10 +199,12 @@ async function prepareFootage(dir: string, siteVideoUrls: string[], keyterms: st
       const v = await prepVideo(path.join(dir, f), path.join(dir, `clip-${i}.mp4`), "");
       if (!v) return {};
       const [seen, words] = await Promise.all([describeFootage(dir, v, "upload"), v.hasAudio ? transcribe(dir, v, keyterms) : Promise.resolve([])]);
-      // talking = Gemini saw someone talk to camera AND there are enough words to cut on
-      if (seen.talk && words.length >= 12) {
-        const phrases = toPhrases(words);
-        return { talk: { clip: { ...v, label: `someone talking to camera (their upload). ${seen.text}` }, phrases } };
+      // Any upload with real speech can carry a video in its own words: a fresh selfie,
+      // or past UGC where someone talks for a few seconds and then it cuts to a demo.
+      // Reusing a phrase replays that moment of the video, picture and sound together.
+      if (words.length >= 12) {
+        const what = seen.face ? "their video with someone talking to camera" : "their video with a voice speaking over it";
+        return { talk: { clip: { ...v, captions: seen.captions, label: `${what}. ${seen.text}` }, phrases: toPhrases(words) } };
       }
       return { video: { ...v, label: `their own footage of the product. ${seen.text}` } };
     }),

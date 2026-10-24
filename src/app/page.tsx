@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useState } from "react";
 import { StartButton } from "./Start";
 
@@ -21,8 +22,8 @@ const STEPS = [
   },
   {
     n: "4",
-    title: "See who clicked",
-    text: "Every post and reply gets its own link. Clicks show up live.",
+    title: "See what worked",
+    text: "Every video gets its own bio link with live clicks, and every message counts its replies.",
   },
 ];
 
@@ -34,12 +35,12 @@ export default function Home() {
       {/* Sleek Top Navigation Bar */}
       <header className="sticky top-0 z-30 w-full border-b border-black/[0.05] bg-[#F6F4EF]/80 backdrop-blur-md transition-all">
         <div className="mx-auto flex h-16 w-full max-w-6xl items-center justify-between px-6">
-          <a
+          <Link
             href="/"
             className="text-xs font-bold uppercase tracking-[0.25em] text-black/40 transition-colors hover:text-black"
           >
             Pollen
-          </a>
+          </Link>
           <div className="flex items-center gap-2 rounded-full border border-black/[0.08] bg-white/70 px-4 py-1.5 shadow-xs backdrop-blur-sm transition-all hover:border-black/20">
             <span className="h-1.5 w-1.5 rounded-full bg-black/50" />
             <p className="text-xs font-semibold text-black/50">Customers, not marketing advice.</p>

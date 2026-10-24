@@ -94,6 +94,7 @@ export type Asset = {
   height: number;
   label: string; // what Claude was told this asset is
   durationSec?: number; // video / talk
+  captions?: boolean; // talk: words already burned into the picture, so ours stay off
 };
 
 export type SiteElement = { label: string; kind: "button" | "heading" | "card" | "image"; x: number; y: number; w: number; h: number };

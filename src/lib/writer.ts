@@ -42,7 +42,7 @@ How these videos work:
 - The last voice line leads into the call to action; the cta line is the end card (short, with the domain).
 
 Scenes (set scene and only the fields that scene uses; unused: assetIndex -1, secondAssetIndex -1, elementIndex -1, prompt "", items [], clipStart -1, phrase -1, stockQuery ""):
-- talk: the person on camera, full screen, saying this shot's phrase (assetIndex = the clip that phrase comes from). Only in "clip" voice videos.
+- talk: replays the moment of their video where this shot's phrase is said, picture and sound together, full screen (assetIndex = the clip that phrase comes from). The picture is whatever that clip shows at that moment: the person, or the product if their video cuts to a demo there (check the clip's description). Only in "clip" voice videos. In "ai" videos a talking clip can still be used as silent footage.
 - footage: a video asset full screen (assetIndex = that video); clipStart = the second to start from, picked from the video's description so the moment shown matches the line.
 - stock: real stock footage found by stockQuery (2 to 5 concrete search words, e.g. "tired man laptop night", "woman filming phone selfie"), full screen. People, places and moods that set up the story, never the product itself and never someone talking to camera (the lips would not match the voice). clipStart 0.
   For talk, footage and stock, onScreenText is 1 to 3 punch words (like "CAPTIONS" or "ONE CLICK") that slam in big over the footage.
@@ -56,7 +56,7 @@ Scenes (set scene and only the fields that scene uses; unused: assetIndex -1, se
 - logo: logo + line. At most once.
 
 voice:
-- "clip": the video is carried by their own words. Only when there is a talking clip. Each shot sets phrase = one phrase number from the transcript, in the order that makes the best video (strongest hook first), each phrase at most once, and voiceLine = that phrase's text copied exactly. 4 to 8 phrases, 12 to 30 seconds in total. The first shot is always talk (their face is the hook), and at least half the shots are talk; the others cut away to footage or a scene that shows what they say in that phrase. Which videos use "clip": the ones whose recipe is carried by a person on camera; a recipe built on product shots, photos or screens keeps that look with an "ai" voice and their footage and photos. If there are talking clips but no recipe needs a person, still make one "clip" video. Phrases in one video come from one clip. With several talking clips, give each "clip" video a different clip; never open two videos on the same phrase.
+- "clip": the video is carried by their own words. Only when there is a talking clip. Each shot sets phrase = one phrase number from the transcript, in the order that makes the best video (strongest hook first), each phrase at most once, and voiceLine = that phrase's text copied exactly. 4 to 8 phrases, 12 to 30 seconds in total. The first shot is always talk (their hook, in their words), and at least half the shots are talk; the others cut away to footage or a scene that shows what they say in that phrase. Which videos use "clip": the ones whose recipe is carried by a person on camera; a recipe built on product shots, photos or screens keeps that look with an "ai" voice and their footage and photos. If there are talking clips but no recipe needs a person, still make one "clip" video. Phrases in one video come from one clip. With several talking clips, give each "clip" video a different clip; never open two videos on the same phrase.
 - "ai": a voiceover you write (phrase -1 on every shot). No talk shots.
 
 theme: "light" (airy, white cards, blurred product backdrop) or "dark" (cinematic). Follow the recipe's look; without a recipe, light suits physical products and bright brands, dark suits software and tech.
@@ -72,6 +72,7 @@ Formats (also the visual style: set format to the closest one for every video):
 
 Brand colours: pick primary (the brand's accent, used for highlights and the end card), background and text as hex values that look like the site and read well together. Use the colour hints when they make sense.
 
+brief.what is what the product itself is, in one plain sentence (e.g. "Official Scuderia Ferrari team replica jackets, caps and shirts"), never a description of the videos.
 postCaption is what they paste when posting: one or two lines in the same voice, ending with a short pointer to the link in bio (captions are not clickable), no hashtags inside it, no em dashes (they read as AI-written). hashtags: 3 to 5, no # sign.`;
 
 function recipesText(outliers: Outlier[]): string {

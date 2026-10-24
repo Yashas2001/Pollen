@@ -96,6 +96,14 @@ export function StartButton() {
     }
   }
 
+  // Still checking, or signed in and about to jump to the app: never flash "Start free" at them.
+  if (user !== null)
+    return (
+      <div className="flex h-[88px] items-start">
+        <div className="mt-4 h-6 w-6 animate-spin rounded-full border-2 border-black/10 border-t-black/60" />
+      </div>
+    );
+
   return (
     <div className="flex flex-col items-center gap-2.5">
       <button

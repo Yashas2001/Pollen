@@ -21,6 +21,7 @@ export type Footage = {
   hasAudio: boolean;
   label: string; // what the writer is told it is
   source?: string; // original file name, often says what it shows ("beat-edit.mp4")
+  captions?: boolean; // words already burned into the picture
 };
 
 export type Word = { text: string; start: number; end: number };
@@ -89,26 +90,30 @@ export async function grabSiteVideos(urls: string[], dir: string, max = 3): Prom
 // What happens in a clip, second by second, so the writer can pick the right moments.
 // For uploads it also tells us whether it's someone talking to camera (their own or
 // past UGC) or footage of the product. Gemini watches a small copy, not the original.
-export async function describeFootage(dir: string, f: Footage, kind: "upload" | "site"): Promise<{ talk: boolean; text: string }> {
+export async function describeFootage(dir: string, f: Footage, kind: "upload" | "site"): Promise<{ face: boolean; captions: boolean; text: string }> {
   const small = path.join(dir, `${f.file}.small.mp4`);
   try {
     await execFileP("ffmpeg", ["-v", "error", "-y", "-i", path.join(dir, f.file), "-vf", "scale=360:-2,fps=5", "-c:v", "libx264", "-crf", "32", "-preset", "veryfast", "-c:a", "aac", "-b:a", "48k", "-ac", "1", small], { timeout: 120_000 });
     const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY, httpOptions: { timeout: 60_000 } });
     const ask =
       (kind === "upload"
-        ? "First line: TALK if a person speaks to the camera for most of this clip (a founder, creator or customer talking), otherwise FOOTAGE.\nThen "
+        ? "Line 1: FACE if a person talks to the camera at any point, otherwise NOFACE.\nLine 2: CAPTIONS if subtitles or words are burned into the video while someone speaks, otherwise NOCAPTIONS.\nThen "
         : "") +
-      "describe what is visible in time ranges, like '0-3s: ...'. Be concrete: who or what is on screen, which screen of the product, what gets clicked or changes, what the product does. Max 8 lines.";
+      "describe what is visible in time ranges, like '0-3s: ...'. Be concrete: when a person is on camera and when the product is shown, which screen of the product, what gets clicked or changes, what the product does. Max 8 lines.";
     const res = await ai.models.generateContent({
       model: "gemini-3.8-flash",
       contents: [{ role: "user", parts: [{ inlineData: { mimeType: "video/mp4", data: (await readFile(small)).toString("base64") } }, { text: ask }] }],
     });
     const raw = (res.text ?? "").trim();
-    const talk = kind === "upload" && /^\W*TALK\b/i.test(raw);
-    return { talk, text: raw.replace(/^\W*(TALK|FOOTAGE)\W*\n?/i, "").trim().slice(0, 900) };
+    const lines = raw.split("\n");
+    const head = kind === "upload" ? lines.slice(0, 2).join(" ") : "";
+    const face = /\bFACE\b/.test(head) && !/\bNOFACE\b/.test(head);
+    const captions = /\bCAPTIONS\b/.test(head) && !/\bNOCAPTIONS\b/.test(head);
+    const text = (kind === "upload" ? lines.slice(2) : lines).join("\n").trim().slice(0, 900);
+    return { face, captions, text };
   } catch (e) {
     console.warn("[footage] describe failed", f.file, (e as Error).message.slice(0, 160));
-    return { talk: false, text: "" };
+    return { face: false, captions: false, text: "" };
   } finally {
     await unlink(small).catch(() => {});
   }

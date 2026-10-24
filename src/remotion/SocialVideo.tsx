@@ -49,6 +49,12 @@ export const SocialVideo: React.FC<VideoProps> = (props) => {
   const starts = endFrom.slice(0, script.shots.length);
   const endCardFrom = endFrom[endFrom.length - 1];
 
+  // Their own video may already have words burned in: ours stay off while it plays.
+  const captionsOff = script.shots.some((sh, i) => {
+    const to = i + 1 < starts.length ? starts[i + 1] : endCardFrom;
+    return sh.scene === "talk" && props.assets[sh.assetIndex]?.captions && f >= starts[i] && f < to;
+  });
+
   // The stage breathes with the kick; every cut flashes the brand colour.
   const kick = f < endCardFrom ? kickEnv(f, 5) : 0;
   const shake = f < starts[1] ? kickEnv(f, 4) * 10 : kickEnv(f, 4) * 3;
@@ -112,9 +118,11 @@ export const SocialVideo: React.FC<VideoProps> = (props) => {
         />
       </Sequence>
 
+      {captionsOff ? null : (
       <Sequence durationInFrames={endCardFrom}>
         <Captions captions={props.captions} accent={accent.onMain === "#FFFFFF" ? accent.deep : accent.main} onAccent={accent.onMain} />
       </Sequence>
+      )}
 
       <Flash v={hitEnv(f, [0], 6) * 0.5 + hitEnv(f, starts.slice(1), 4) * 0.16 + hitEnv(f, [endCardFrom], 5) * 0.3} color={accent.main} />
       <Vignette o={script.voice === "clip" ? 0.22 : theme.dark ? 0.6 : 0.18} />

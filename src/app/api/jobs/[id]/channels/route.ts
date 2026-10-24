@@ -5,7 +5,8 @@ import { z } from "zod";
 import { getJob, type Job } from "@/lib/jobs";
 import { DATA_ROOT } from "@/lib/links";
 
-// Prepared work for channels we can't launch yet (ads, email, creators, auto-posting).
+// Prepared work for channels we can't launch yet (ads, auto-posting). Creators and
+// emails to businesses are real lists now: see src/lib/outreach.
 // Made once per job with one Gemini call, then served from data/channels/<id>.json.
 
 const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY, httpOptions: { timeout: 90_000 } });
@@ -25,8 +26,6 @@ const Channels = z.object({
     descriptions: z.array(z.string()),
     keywords: z.array(z.string()),
   }),
-  email: z.object({ subject: z.string(), body: z.string() }),
-  creators: z.object({ niche: z.string(), size: z.string(), dm: z.string() }),
   autopost: z.object({
     plan: z.array(z.object({ video: z.string(), platform: z.string(), day: z.string(), time: z.string() })),
   }),
@@ -69,14 +68,10 @@ Only claim what the brief supports. No invented numbers, customers or awards.
 Return JSON only, matching:
 {"meta": {"headline": string, "primaryText": string, "targeting": {"age": string, "interests": string[], "places": string[]}, "dailyBudgetUsd": number, "budgetWhy": string},
  "google": {"headlines": string[], "descriptions": string[], "keywords": string[]},
- "email": {"subject": string, "body": string},
- "creators": {"niche": string, "size": string, "dm": string},
  "autopost": {"plan": [{"video": string, "platform": string, "day": string, "time": string}]}}
 
 - meta: Meta (Facebook/Instagram) ad. primaryText is exactly 2 lines separated by "\\n". targeting: age range like "25-44", 3 to 6 interests, 1 to 4 countries or cities. dailyBudgetUsd: a sensible starting test budget; budgetWhy: one line.
 - google: Google search ad. Exactly 3 headlines, each 30 characters or fewer (count them). Exactly 2 descriptions, each 90 characters or fewer. Exactly 5 keywords people would type.
-- email: a cold email to one likely customer. Subject under 8 words. Body 90 words or fewer, plain text, starts with "Hi [Name],".
-- creators: what kind of creators fit (niche) and their size (follower range), plus a short DM (under 60 words) to send them.
 - autopost: one entry per video (use the video names above) saying which platform (TikTok, Instagram Reels or YouTube Shorts), which weekday and what local time to post.`;
 
   console.log(`[channels] gemini call for job ${job.id}`);

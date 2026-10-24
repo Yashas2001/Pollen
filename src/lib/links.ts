@@ -6,7 +6,7 @@ import path from "node:path";
 // scoreboard can show which post brought clicks.
 // Owner: Teammate B. Also src/app/r/[code]/ and src/app/v/[id]/Scoreboard.tsx + EarlyAccess.tsx.
 
-export type LinkChannel = "tiktok" | "reels" | "shorts" | "x" | "reddit" | "hn" | "linkedin" | "other";
+export type LinkChannel = "tiktok" | "reels" | "shorts" | "x" | "reddit" | "hn" | "linkedin" | "creator" | "partner" | "other";
 
 export type TrackedLink = {
   code: string;

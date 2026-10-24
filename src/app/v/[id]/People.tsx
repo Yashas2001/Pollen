@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import type { Job } from "@/lib/jobs";
 import type { Person, Platform } from "@/lib/people/types";
+import { MarkButtons, useMarks, type Marks } from "./Marks";
 
 const PLATFORM: Record<Platform, { name: string; badge: string }> = {
   reddit: { name: "Reddit", badge: "bg-orange-100 text-orange-800" },
@@ -35,28 +36,51 @@ export function People({ job: fromPage }: { job: Job }) {
     return () => clearInterval(t);
   }, [job]);
   const people = job.people ?? [];
+  const asking = people.filter((p) => p.kind !== "talking");
+  const talking = people.filter((p) => p.kind === "talking");
+  const marks = useMarks(fromPage.id);
   return (
     <section className="mt-10 rounded-3xl bg-white p-6 shadow-sm">
       <h2 className="text-xl font-bold">People asking for this right now</h2>
-      <p className="text-sm text-black/50">Real posts from the last 7 days. Nothing is posted for you.</p>
+      <p className="text-sm text-black/50">Real posts from the last 7 days (30 when few are asking). Replies help first and say you build it, with no link (communities remove links). Nothing is posted for you.</p>
       {job.peopleStatus === "finding" || !job.peopleStatus ? (
         <p className="mt-6 text-black/60">Looking for people asking...</p>
       ) : job.peopleStatus === "failed" ? (
         <p className="mt-6 text-black/60">Couldn&apos;t search right now. Try again with a new link later.</p>
       ) : people.length === 0 ? (
-        <p className="mt-6 text-black/60">No one asking for this in the last week.</p>
+        <p className="mt-6 text-black/60">No one asking for this, and no active threads about it, in the last month.</p>
       ) : (
-        <div className="mt-6 grid gap-4 md:grid-cols-2">
-          {people.map((p) => (
-            <PersonCard key={p.url} person={p} />
-          ))}
-        </div>
+        <>
+          {asking.length ? (
+            <div className="mt-6 grid gap-4 md:grid-cols-2">
+              {asking.map((p) => (
+                <PersonCard key={p.url} person={p} marks={marks} />
+              ))}
+            </div>
+          ) : (
+            <p className="mt-6 text-black/60">No one asked for this directly in the last month.</p>
+          )}
+          {talking.length ? (
+            <>
+              <h3 className="mt-10 text-lg font-bold">Where your buyers are talking</h3>
+              <p className="text-sm text-black/50">
+                Not asking to buy, but your buyers are in these threads right now. Join in with something useful; the
+                replies don&apos;t pitch.
+              </p>
+              <div className="mt-4 grid gap-4 md:grid-cols-2">
+                {talking.map((p) => (
+                  <PersonCard key={p.url} person={p} marks={marks} />
+                ))}
+              </div>
+            </>
+          ) : null}
+        </>
       )}
     </section>
   );
 }
 
-function PersonCard({ person }: { person: Person }) {
+function PersonCard({ person, marks }: { person: Person; marks: Marks }) {
   const [reply, setReply] = useState(person.reply);
   const [copied, setCopied] = useState(false);
   const platform = PLATFORM[person.platform];
@@ -120,6 +144,7 @@ function PersonCard({ person }: { person: Person }) {
           </a>
         ) : null}
       </div>
+      <MarkButtons marks={marks} k={person.url} label={`Reply to ${person.author} on ${platform.name}`} channel={person.platform} />
     </article>
   );
 }

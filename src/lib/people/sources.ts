@@ -16,14 +16,15 @@ async function getJson<T>(url: string): Promise<T> {
 // Reddit's own search.json now redirects to a login page (reason=lor2), so we read
 // Arctic Shift, a public near-real-time Reddit archive. Its full-text search times out,
 // so we list each subreddit's last week and keep posts that look like a question.
-const ASKING = /\?|looking for|recommend|alternative|any (good )?(tool|app|software)|how (do|can|to)|suggestions?|need (a|an|help)|best (way|tool|app)/i;
+const ASKING = /\?|looking for|recommend|alternative|where (can|do|to) (i )?(buy|get|find)|worth it|gift|any (good )?(tool|app|software)|how (do|can|to)|suggestions?|need (a|an|help)|best (way|tool|app)/i;
 
-export async function reddit(subreddits: string[], terms: string[]): Promise<Candidate[]> {
+// days: how far back. asking: keep only posts that look like a question (off for "where buyers talk").
+export async function reddit(subreddits: string[], terms: string[], days = 7, asking = true): Promise<Candidate[]> {
   const words = terms.map((t) => t.toLowerCase());
   const lists = await Promise.allSettled(
     subreddits.map((s) =>
       getJson<{ data: { id: string; title: string; selftext?: string; author: string; created_utc: number; subreddit: string }[] | null; error?: string }>(
-        `https://arctic-shift.photon-reddit.com/api/posts/search?subreddit=${encodeURIComponent(s)}&after=${now() - 7 * DAY}&limit=100&sort=desc&fields=id,title,selftext,author,created_utc,subreddit`,
+        `https://arctic-shift.photon-reddit.com/api/posts/search?subreddit=${encodeURIComponent(s)}&after=${now() - days * DAY}&limit=100&sort=desc&fields=id,title,selftext,author,created_utc,subreddit`,
       ),
     ),
   );
@@ -33,7 +34,7 @@ export async function reddit(subreddits: string[], terms: string[]): Promise<Can
     for (const p of r.value.data ?? []) {
       const text = `${p.title}\n${p.selftext ?? ""}`.trim();
       const lower = text.toLowerCase();
-      if (p.author === "[deleted]" || !ASKING.test(text) || !words.some((w) => lower.includes(w))) continue;
+      if (p.author === "[deleted]" || (asking && !ASKING.test(text)) || !words.some((w) => lower.includes(w))) continue;
       out.push({
         platform: "reddit",
         url: `https://www.reddit.com/r/${p.subreddit}/comments/${p.id}/`,
@@ -86,15 +87,15 @@ async function googleAll(queries: string[], tbs: "qdr:w" | "qdr:m") {
 }
 
 // Reddit threads Google found, then the real post (author, text, date) from Arctic Shift.
-export async function redditFromGoogle(phrases: string[]): Promise<Candidate[]> {
-  const hits = await googleAll(phrases.slice(0, 4).map((p) => `site:reddit.com ${p}`), "qdr:w");
+export async function redditFromGoogle(phrases: string[], days = 7): Promise<Candidate[]> {
+  const hits = await googleAll(phrases.slice(0, 4).map((p) => `site:reddit.com ${p}`), days > 7 ? "qdr:m" : "qdr:w");
   const ids = [...new Set(hits.flatMap((h) => h.url.match(/reddit\.com\/r\/\w+\/comments\/(\w+)/)?.[1] ?? []))];
   if (!ids.length) return [];
   const { data } = await getJson<{ data: { id: string; title: string; selftext?: string; author: string; created_utc: number; subreddit: string }[] | null }>(
     `https://arctic-shift.photon-reddit.com/api/posts/ids?ids=${ids.join(",")}&fields=id,title,selftext,author,created_utc,subreddit`,
   );
   return (data ?? [])
-    .filter((p) => p.created_utc > now() - 7 * DAY && p.author !== "[deleted]")
+    .filter((p) => p.created_utc > now() - days * DAY && p.author !== "[deleted]")
     .map((p) => ({
       platform: "reddit" as const,
       url: `https://www.reddit.com/r/${p.subreddit}/comments/${p.id}/`,
@@ -125,16 +126,16 @@ export async function linkedin(queries: string[]): Promise<Candidate[]> {
 }
 
 // X posts Google found this week. The tweet id holds the post time (Twitter epoch).
-export async function x(phrases: string[], terms: string[]): Promise<Candidate[]> {
+export async function x(phrases: string[], terms: string[], days = 7, asking = true): Promise<Candidate[]> {
   const words = terms.map((t) => t.toLowerCase());
   const out: Candidate[] = [];
-  for (const h of await googleAll(phrases.slice(0, 4).map((p) => `site:x.com ${p}`), "qdr:w")) {
+  for (const h of await googleAll(phrases.slice(0, 4).map((p) => `site:x.com ${p}`), days > 7 ? "qdr:m" : "qdr:w")) {
     const m = h.url.match(/(?:x|twitter)\.com\/(\w+)\/status\/(\d+)/);
     if (!m) continue;
     const posted = new Date(Number(BigInt(m[2]) >> BigInt(22)) + 1288834974657);
     // Same cheap filter as Reddit before any AI: this week, sounds like a question, mentions the niche.
     const lower = h.snippet.toLowerCase();
-    if (posted.getTime() < Date.now() - 7 * DAY * 1000 || !ASKING.test(h.snippet) || !words.some((w) => lower.includes(w))) continue;
+    if (posted.getTime() < Date.now() - days * DAY * 1000 || (asking && !ASKING.test(h.snippet)) || !words.some((w) => lower.includes(w))) continue;
     out.push({ platform: "x", url: `https://x.com/${m[1]}/status/${m[2]}`, author: `@${m[1]}`, text: h.snippet, postedAt: posted.toISOString() });
   }
   return out;
@@ -151,11 +152,11 @@ const decode = (html: string) =>
     .replace(/&lt;/g, "<")
     .replace(/&amp;/g, "&");
 
-export async function hackerNews(keywords: string[]): Promise<Candidate[]> {
+export async function hackerNews(keywords: string[], days = 7): Promise<Candidate[]> {
   const results = await Promise.allSettled(
     keywords.map((k) =>
       getJson<{ hits: { objectID: string; title?: string; story_text?: string; comment_text?: string; author: string; created_at: string }[] }>(
-        `https://hn.algolia.com/api/v1/search_by_date?query=${encodeURIComponent(k)}&tags=(story,comment)&numericFilters=created_at_i>${now() - 7 * DAY}&hitsPerPage=20`,
+        `https://hn.algolia.com/api/v1/search_by_date?query=${encodeURIComponent(k)}&tags=(story,comment)&numericFilters=created_at_i>${now() - days * DAY}&hitsPerPage=20`,
       ),
     ),
   );

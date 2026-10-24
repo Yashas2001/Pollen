@@ -4,6 +4,7 @@
 // What the finder knows about the business (from the site read + research).
 export type PeopleBrief = {
   url: string; // the product's site
+  name?: string; // the product's name, as its site writes it
   what: string; // what it is
   who: string; // who it's for
   pain: string; // the problem it solves
@@ -22,8 +23,11 @@ export type Person = {
   postedAt: string; // ISO date
   score: number; // 0-10: how clearly they are asking for this product
   why: string; // one line: why this person fits
-  reply: string; // helpful human reply draft, includes the tracked link
+  reply: string; // helpful human reply draft, says "I'm building X", no link (communities remove them)
   replyUrl?: string; // one-click reply (X intent link); else the founder opens url and pastes
-  linkCode?: string; // tracked link code from makeLink(), for the scoreboard
+  linkCode?: string; // older runs only: replies used to carry a tracked link
   coach?: { verdict: "post" | "rewrite"; reason: string }; // AgenticOrg Reply Coach's check of the reply
+  // asking: wants this kind of product. talking: a live thread where its buyers discuss the topic
+  // (only shown when too few are asking). Missing on older runs = asking.
+  kind?: "asking" | "talking";
 };

@@ -2,9 +2,11 @@
 
 import { useEffect, useState } from "react";
 import type { LinkStats } from "@/lib/links";
+import type { Mark } from "@/lib/marks";
 
-// Clicks per post and per channel, live: polls the stats route every 10 s.
-// It counts clicks. Not signups, not views.
+// Clicks per bio link and per channel, live: polls the stats route every 10 s.
+// It counts clicks. Not signups, not views. Outreach and replies have no links, so
+// they count by what the founder marked on each card: sent, then got a reply.
 
 const CHANNEL_NAME: Record<string, string> = {
   tiktok: "TikTok",
@@ -14,6 +16,8 @@ const CHANNEL_NAME: Record<string, string> = {
   reddit: "Reddit",
   hn: "Hacker News",
   linkedin: "LinkedIn",
+  creator: "Creators",
+  partner: "Businesses",
   other: "Other",
 };
 
@@ -29,6 +33,7 @@ function ago(iso: string, now: number) {
 
 export function Scoreboard({ jobId }: { jobId: string }) {
   const [stats, setStats] = useState<LinkStats | null>(null);
+  const [marks, setMarks] = useState<Mark[]>([]);
   const [refreshing, setRefreshing] = useState(false);
   const [now, setNow] = useState(() => Date.now());
 
@@ -37,8 +42,12 @@ export function Scoreboard({ jobId }: { jobId: string }) {
     async function load() {
       setRefreshing(true);
       try {
-        const res = await fetch(`/api/jobs/${jobId}/stats`, { cache: "no-store" });
+        const [res, m] = await Promise.all([
+          fetch(`/api/jobs/${jobId}/stats`, { cache: "no-store" }),
+          fetch(`/api/jobs/${jobId}/marks`, { cache: "no-store" }),
+        ]);
         if (res.ok && alive) setStats((await res.json()) as LinkStats);
+        if (m.ok && alive) setMarks((await m.json()) as Mark[]);
       } catch {
         // Keep the last numbers; try again on the next tick.
       } finally {
@@ -62,6 +71,8 @@ export function Scoreboard({ jobId }: { jobId: string }) {
     .filter(([, n]) => n > 0)
     .sort((a, b) => b[1] - a[1]);
   const empty = !stats || stats.totalClicks === 0;
+  const sent = marks.filter((m) => m.sent);
+  const replied = marks.filter((m) => m.replied).sort((a, b) => b.at.localeCompare(a.at));
 
   return (
     <section className="mt-10 rounded-3xl bg-white p-6 shadow-sm">
@@ -76,13 +87,42 @@ export function Scoreboard({ jobId }: { jobId: string }) {
         </span>
       </div>
 
-      <p className="mt-4 text-6xl font-black tabular-nums">{stats?.totalClicks ?? 0}</p>
-      <p className="text-sm text-black/50">{stats?.totalClicks === 1 ? "click" : "clicks"} from your posts and replies</p>
+      <div className="mt-4 flex flex-wrap gap-x-10 gap-y-4">
+        <div>
+          <p className="text-6xl font-black tabular-nums">{stats?.totalClicks ?? 0}</p>
+          <p className="text-sm text-black/50">{stats?.totalClicks === 1 ? "click" : "clicks"} from your bio links</p>
+        </div>
+        <div>
+          <p className="text-6xl font-black tabular-nums">{replied.length}</p>
+          <p className="text-sm text-black/50">
+            {replied.length === 1 ? "reply" : "replies"} from {sent.length} {sent.length === 1 ? "message" : "messages"} sent
+          </p>
+        </div>
+      </div>
 
-      {empty ? (
+      {empty && !sent.length ? (
         <p className="mt-6 rounded-2xl bg-black/5 p-4 text-sm text-black/60">
-          Post a video or a reply. Every click shows up here live.
+          Put your bio link up and post a video: every click shows here live. Mark replies and emails as sent and replied on their cards.
         </p>
+      ) : null}
+
+      {replied.length ? (
+        <ul className="mt-6 divide-y divide-black/5">
+          {replied.map((m) => (
+            <li key={m.key} className="flex items-center gap-3 py-3">
+              <div className="min-w-0 flex-1">
+                <p className="truncate font-semibold">{m.label}</p>
+                <p className="text-xs text-black/50">
+                  <span className="mr-2 rounded-full bg-black/5 px-2 py-0.5 font-semibold text-black/70">
+                    {CHANNEL_NAME[m.channel] ?? m.channel}
+                  </span>
+                  replied {ago(m.at, now)}
+                </p>
+              </div>
+              <span className="shrink-0 rounded-full bg-emerald-50 px-3 py-1 text-sm font-semibold text-emerald-900">Got a reply</span>
+            </li>
+          ))}
+        </ul>
       ) : null}
 
       {links.length ? (
