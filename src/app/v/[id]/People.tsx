@@ -72,6 +72,15 @@ function PersonCard({ person }: { person: Person }) {
         <span className="font-semibold">Why: </span>
         {person.why}
       </p>
+      {person.coach ? (
+        <p className="rounded-2xl bg-emerald-50 p-3 text-sm text-emerald-900">
+          <span className="font-semibold">
+            {person.coach.verdict === "post" ? "Safe to post" : "Edited for this community"}
+          </span>
+          <span className="text-emerald-900/70"> · checked by AgenticOrg Reply Coach</span>
+          {person.coach.reason ? <span className="mt-1 block">{person.coach.reason}</span> : null}
+        </p>
+      ) : null}
       <label className="flex flex-col gap-1 text-sm font-semibold">
         Your reply
         <textarea

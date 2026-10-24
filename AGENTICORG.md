@@ -2,6 +2,8 @@
 
 For Suhas and Rakshith. Proposal from Yashas (People finder).
 
+**Status: built.** The agent exists in our tenant and is wired into the People finder (`src/lib/people/coach.ts`). Set `AGENTICORG_BASE_URL`, `AGENTICORG_API_KEY` and `AGENTICORG_REPLY_COACH_ID` in `.env`; without them the finder skips the check and keeps its own drafts. Each check takes about 4 s and costs about $0.0005, and all checks run in parallel. Runs come back `hitl_triggered` (AgenticOrg queues them for review) with the answer already in `output`; we use it, because the founder reviews every reply before posting. Known trade-off: the agent usually removes the product link, so those replies don't carry a tracked link for the scoreboard.
+
 ## The idea
 
 The hackathon needs an agent from AgenticOrg (https://agenticorg.hackathon.pinelabs.com). Proposal: a custom agent, **Reply Coach**, that checks every reply the People finder drafts before the founder sees it.
