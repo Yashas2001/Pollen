@@ -1,12 +1,14 @@
 import { GoogleGenAI, ThinkingLevel } from "@google/genai";
 import { z } from "zod";
 import { makeLink } from "@/lib/links";
-import { hackerNews, linkedin, reddit, redditFromGoogle, type Candidate } from "./sources";
+import { hackerNews, linkedin, reddit, redditFromGoogle, x, type Candidate } from "./sources";
 import type { Person, PeopleBrief } from "./types";
 
 const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY, httpOptions: { timeout: 40_000 } });
 const MODEL = "gemini-3.8-flash";
-const MAX_CANDIDATES = 40;
+// Per-source share of the candidates sent for scoring, so one noisy source can't crowd out the rest.
+const BATCH = 15;
+const CAP: Record<string, number> = { google_reddit: 15, linkedin: 6, x: 8, hn: 6, reddit: 10 };
 
 const Search = z.object({
   phrases: z.array(z.string()),
@@ -61,6 +63,7 @@ We want to find people online who are asking for what this product does, right n
       reddit: reddit(search.subreddits, search.terms),
       hn: hackerNews(search.keywords),
       linkedin: linkedin(search.linkedin),
+      x: x(search.phrases),
     };
     const settled = await Promise.allSettled(Object.values(sources));
     const found: Candidate[] = [];
@@ -68,17 +71,24 @@ We want to find people online who are asking for what this product does, right n
       const name = Object.keys(sources)[i];
       if (r.status === "fulfilled") {
         console.log(`[people] ${name}: ${r.value.length} candidates`);
-        found.push(...r.value);
+        found.push(...clean(r.value, brief, search.terms).slice(0, CAP[name]));
       } else console.warn(`[people] ${name} failed:`, r.reason);
     });
 
-    const candidates = clean(found, brief, search.terms).slice(0, MAX_CANDIDATES);
+    const candidates = found.filter((c, k) => found.findIndex((o) => o.url === c.url) === k);
     if (!candidates.length) return [];
 
-    const list = candidates.map((c, i) => `[${i}] ${PLATFORM_NAME[c.platform]}, by ${c.author}:\n${c.text}`).join("\n\n");
-    const { results } = await ask(
-      Scored,
-      `${describe(brief)}
+    // Scored in parallel batches: one call with 40+ posts runs past Gemini's deadline.
+    const batches = Array.from({ length: Math.ceil(candidates.length / BATCH) }, (_, b) => b * BATCH);
+    const scored = await Promise.allSettled(
+      batches.map(async (offset) => {
+        const list = candidates
+          .slice(offset, offset + BATCH)
+          .map((c, i) => `[${offset + i}] ${PLATFORM_NAME[c.platform]}, by ${c.author}:\n${c.text}`)
+          .join("\n\n");
+        return (await ask(
+          Scored,
+          `${describe(brief)}
 
 Below are recent posts. For each one, score 0 to 10: is this person asking for something this product does? 10 = they are clearly looking for exactly this kind of product. 0 = off-topic, an ad, someone promoting their own product, or a news/discussion post that asks for nothing.
 
@@ -89,7 +99,11 @@ For every post scoring 6 or more, also write:
 Return JSON: {"results": [{"i": number, "score": number, "why": string, "reply": string}]} with one entry per post.
 
 ${list}`,
+        )).results;
+      }),
     );
+    scored.forEach((r) => r.status === "rejected" && console.warn("[people] scoring batch failed:", r.reason?.message ?? r.reason));
+    const results = scored.flatMap((r) => (r.status === "fulfilled" ? r.value : []));
 
     console.log("[people] scores", results.map((r) => r.score).join(" "));
     const best = results
@@ -103,7 +117,9 @@ ${list}`,
         const c = candidates[r.i];
         const link = await makeLink(jobId, { channel: c.platform, label: `Reply to ${c.author} on ${PLATFORM_NAME[c.platform]}`, target: brief.url });
         const reply = r.reply.includes("{link}") ? r.reply.replace("{link}", link.url).replaceAll("{link}", "") : `${r.reply} ${link.url}`;
-        return { ...c, score: r.score, why: r.why, reply, linkCode: link.code || undefined };
+        const tweetId = c.platform === "x" ? c.url.split("/status/")[1] : undefined;
+        const replyUrl = tweetId ? `https://x.com/intent/post?in_reply_to=${tweetId}&text=${encodeURIComponent(reply)}` : undefined;
+        return { ...c, score: r.score, why: r.why, reply, replyUrl, linkCode: link.code || undefined };
       }),
     );
   } catch (e) {

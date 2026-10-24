@@ -1,4 +1,3 @@
-import { GoogleGenAI } from "@google/genai";
 import type { Platform } from "./types";
 
 // A raw post from one source, before scoring.
@@ -47,37 +46,39 @@ export async function reddit(subreddits: string[], terms: string[]): Promise<Can
   return out;
 }
 
-// Google, through Gemini's search tool. Links come only from grounding metadata:
-// URLs the model writes in its own text are often invented.
-const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY, httpOptions: { timeout: 60_000 } });
-const after = (days: number) => `after:${new Date(Date.now() - days * DAY * 1000).toISOString().slice(0, 10)}`;
-
-async function google(queries: string[]): Promise<{ url: string; snippet: string }[]> {
-  const res = await ai.models.generateContent({
-    model: "gemini-3.8-flash",
-    contents: `Search Google for each of these queries and briefly list the posts you find (who is asking, what for):\n${queries.map((q) => `- ${q}`).join("\n")}`,
-    config: { tools: [{ googleSearch: {} }] },
+// Google, through Bright Data's SERP API. tbs=qdr:w / qdr:m = past week / month only.
+// LinkedIn results come back as google.com/goto redirects; the Location header is the real post.
+async function google(query: string, tbs: "qdr:w" | "qdr:m"): Promise<{ url: string; snippet: string }[]> {
+  const url = `https://www.google.com/search?q=${encodeURIComponent(query)}&tbs=${tbs}&brd_json=1&num=20`;
+  const res = await fetch("https://api.brightdata.com/request", {
+    method: "POST",
+    headers: { Authorization: `Bearer ${process.env.BRIGHTDATA_API_KEY}`, "Content-Type": "application/json" },
+    body: JSON.stringify({ zone: process.env.BRIGHTDATA_SERP_ZONE ?? "viskara_serp", url, format: "raw" }),
+    signal: AbortSignal.timeout(25_000),
   });
-  const meta = res.candidates?.[0]?.groundingMetadata;
-  const chunks = meta?.groundingChunks ?? [];
-  const snippets = chunks.map(() => [] as string[]);
-  for (const s of meta?.groundingSupports ?? []) for (const i of s.groundingChunkIndices ?? []) if (s.segment?.text) snippets[i]?.push(s.segment.text);
+  if (!res.ok) throw new Error(`bright data ${res.status}`);
+  const { organic = [] } = (await res.json()) as { organic?: { link: string; title?: string; description?: string }[] };
   const links = await Promise.allSettled(
-    chunks.map(async (c, i) => {
-      const uri = c.web?.uri ?? "";
-      // Grounding links are Google redirects; the Location header is the real page.
-      const real = uri.includes("grounding-api-redirect")
-        ? (await fetch(uri, { redirect: "manual", signal: AbortSignal.timeout(TIMEOUT) })).headers.get("location") ?? ""
-        : uri;
-      return { url: real, snippet: [c.web?.title, ...snippets[i]].filter(Boolean).join(" ") };
-    }),
+    organic.map(async (o) => ({
+      url: o.link.includes("google.com/goto")
+        ? (await fetch(o.link, { redirect: "manual", signal: AbortSignal.timeout(TIMEOUT) })).headers.get("location") ?? ""
+        : o.link,
+      snippet: [o.title, o.description?.replace(/\s*Read more$/, "")].filter(Boolean).join("\n"),
+    })),
   );
   return links.flatMap((l) => (l.status === "fulfilled" && l.value.url ? [l.value] : []));
 }
 
+// Run several searches at once; one failing doesn't drop the others.
+async function googleAll(queries: string[], tbs: "qdr:w" | "qdr:m") {
+  const results = await Promise.allSettled(queries.map((q) => google(q, tbs)));
+  results.forEach((r, i) => r.status === "rejected" && console.warn(`[people] google "${queries[i]}":`, r.reason?.message ?? r.reason));
+  return results.flatMap((r) => (r.status === "fulfilled" ? r.value : []));
+}
+
 // Reddit threads Google found, then the real post (author, text, date) from Arctic Shift.
 export async function redditFromGoogle(phrases: string[]): Promise<Candidate[]> {
-  const hits = await google(phrases.slice(0, 5).map((p) => `site:reddit.com ${p} ${after(7)}`));
+  const hits = await googleAll(phrases.slice(0, 5).map((p) => `site:reddit.com ${p}`), "qdr:w");
   const ids = [...new Set(hits.flatMap((h) => h.url.match(/reddit\.com\/r\/\w+\/comments\/(\w+)/)?.[1] ?? []))];
   if (!ids.length) return [];
   const { data } = await getJson<{ data: { id: string; title: string; selftext?: string; author: string; created_utc: number; subreddit: string }[] | null }>(
@@ -89,16 +90,16 @@ export async function redditFromGoogle(phrases: string[]): Promise<Candidate[]> 
       platform: "reddit" as const,
       url: `https://www.reddit.com/r/${p.subreddit}/comments/${p.id}/`,
       author: p.author,
-      text: `${p.title}\n${p.selftext ?? ""}`.trim(),
+      text: `${p.title}
+${p.selftext ?? ""}`.trim(),
       postedAt: new Date(p.created_utc * 1000).toISOString(),
     }));
 }
 
 // LinkedIn has no search API. Only post links with an activity id count; the id holds the post time.
 export async function linkedin(queries: string[]): Promise<Candidate[]> {
-  const hits = await google(queries.map((q) => `${q} ${after(30)}`));
   const out: Candidate[] = [];
-  for (const h of hits) {
+  for (const h of await googleAll(queries, "qdr:m")) {
     const id = h.url.match(/activity[-:](\d{16,20})/)?.[1];
     if (!id || !h.url.includes("linkedin.com")) continue;
     const posted = new Date(Number(BigInt(id) >> BigInt(22)));
@@ -110,6 +111,19 @@ export async function linkedin(queries: string[]): Promise<Candidate[]> {
       text: h.snippet,
       postedAt: posted.toISOString(),
     });
+  }
+  return out;
+}
+
+// X posts Google found this week. The tweet id holds the post time (Twitter epoch).
+export async function x(phrases: string[]): Promise<Candidate[]> {
+  const out: Candidate[] = [];
+  for (const h of await googleAll(phrases.slice(0, 4).map((p) => `site:x.com ${p}`), "qdr:w")) {
+    const m = h.url.match(/(?:x|twitter)\.com\/(\w+)\/status\/(\d+)/);
+    if (!m) continue;
+    const posted = new Date(Number(BigInt(m[2]) >> BigInt(22)) + 1288834974657);
+    if (posted.getTime() < Date.now() - 7 * DAY * 1000) continue;
+    out.push({ platform: "x", url: `https://x.com/${m[1]}/status/${m[2]}`, author: `@${m[1]}`, text: h.snippet, postedAt: posted.toISOString() });
   }
   return out;
 }
