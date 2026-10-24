@@ -1,36 +1,50 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Hackathon: marketing videos for your product
 
-## Getting Started
+Paste a website link, get three short vertical videos (TikTok / Reels / Shorts) in proven formats, made from the real product. Preview in the browser, download the MP4, copy the post caption.
 
-First, run the development server:
+## Run it
 
 ```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+npm install
+npx playwright install chromium
+cp .env.example .env.local   # then fill in the keys
+npm run dev                   # builds the Remotion bundle, then starts Next on :3000
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Other scripts:
+- `npm run studio`: Remotion Studio, to design the video with live props
+- `npm run bundle`: rebuild the Remotion bundle (do this after changing anything in `src/remotion/` if you need MP4 renders to pick it up; the browser preview updates on its own)
+- `npm run tunnel`: public link via cloudflared. Then set `APP_URL` in `.env.local` to the tunnel URL and restart.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## Stack
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+| Part | Tool |
+|---|---|
+| App + landing page | Next.js 16 (App Router, Tailwind 4) |
+| Reading the site | Playwright: phone-sized screenshots, text, colours, logo |
+| Research | Gemini 3.8 Flash (Google Search, watches YouTube), YouTube Data API v3 |
+| Writing the videos | Luna (gpt-5.6-luna, Azure) or Claude Opus 5.5, structured output against `src/remotion/schema.ts` |
+| Voice + word timings | ElevenLabs `convertWithTimestamps` |
+| Video | Remotion 4: `@remotion/player` for instant preview, `@remotion/renderer` for MP4 |
 
-## Learn More
+## How a job flows
 
-To learn more about Next.js, take a look at the following resources:
+`POST /api/jobs {url}` → `src/lib/pipeline.ts`:
+1. `site.ts` opens the site as a phone, screenshots it (full page + first screen), grabs text/colours/logo
+2. `research/` finds what's winning in the niche:
+   - Gemini + Google Search: niche, search phrases, competitors with their real YouTube handles
+   - YouTube Data API: competitors' recent Shorts + top Shorts for the niche phrases; an outlier is a Short that beat its own channel's median views (3x, competitors 2x); Gemini drops off-topic hits
+   - Gemini watches the top 3 from their YouTube URL and writes down each recipe (hook pattern, beats, pacing, ending)
+3. `writer.ts` (Luna on Azure, or Claude with `WRITER=anthropic`) writes brand colours + 3 scripts, each following a different recipe (`basedOn`)
+4. `voice.ts` voices each script once; character timings give shot start times + captions
+5. Job is `ready`: `/v/[id]` shows the proof ("what's working") + 3 Remotion Players. Download → `POST /api/jobs/[id]/render` → `render.ts` makes the MP4
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+Why YouTube and not TikTok: TikTok is blocked in India, so this laptop can't download TikTok videos for Gemini to watch, and judges here can't open TikTok links. Bright Data works for TikTok numbers (profile = last ~19 videos with views in one call) and is the next source to add. YouTube search costs 100 quota units of 10,000/day, so about 40 runs a day.
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+Jobs live on disk in `data/jobs/<id>/` (job.json + every file). One render at a time.
 
-## Deploy on Vercel
+## Where to work
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+- Video look: `src/remotion/` (`SocialVideo.tsx`, `components/ShotView.tsx`, `Headline.tsx`, `Captions.tsx`)
+- What the AI writes: the system prompt in `src/lib/writer.ts`; the shape in `src/remotion/schema.ts`
+- Pages: `src/app/page.tsx` (landing + link box), `src/app/v/[id]/JobView.tsx` (results)
