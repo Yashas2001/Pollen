@@ -58,7 +58,7 @@ export function JobView({ id }: { id: string }) {
       <div className="max-w-md text-center">
         <h1 className="text-2xl font-bold">That didn&apos;t work</h1>
         <p className="mt-2 text-black/60">{job.error}</p>
-        <Link href="/" className="mt-6 inline-block rounded-2xl bg-black px-6 py-3 font-semibold text-white">
+        <Link href="/app" className="mt-6 inline-block rounded-2xl bg-black px-6 py-3 font-semibold text-white">
           Try another link
         </Link>
       </div>

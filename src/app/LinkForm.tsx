@@ -1,33 +1,53 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useRef, useState } from "react";
+import { authFetch } from "@/lib/firebase";
 
 const GOALS = ["My first 50 users", "First 10 paying customers", "More signups", "Waitlist sign-ups", "More sales"];
+const MAX_FILES = 10;
 
+// One question at a time: link -> what they need -> clips (optional) -> go.
 export function LinkForm() {
   const router = useRouter();
-  const [goal, setGoal] = useState(GOALS[0]);
+  const [step, setStep] = useState<1 | 2 | 3>(1);
+  const [url, setUrl] = useState("");
+  const [goal, setGoal] = useState("");
+  const [files, setFiles] = useState<File[]>([]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const urlBox = useRef<HTMLInputElement>(null);
+  const goalBox = useRef<HTMLInputElement>(null);
 
-  // Read the boxes from the form itself, not from typing events: autofill and text typed
-  // before the page finished loading never fire them, and the button must still work.
-  async function submit(e: React.FormEvent<HTMLFormElement>) {
+  // Read the box itself, not typing events: autofill and text typed before the page
+  // finished loading never fire them.
+  function nextFromUrl(e: React.FormEvent) {
     e.preventDefault();
-    const form = new FormData(e.currentTarget);
-    const url = String(form.get("url") ?? "").trim();
-    if (!url) return setError("Paste your product's website link.");
+    const value = urlBox.current?.value.trim() ?? "";
+    if (!/^(https?:\/\/)?[\w-]+(\.[\w-]+)+/i.test(value)) return setError("Paste your product's website link, like yourproduct.com");
+    setUrl(value);
+    setError(null);
+    setStep(2);
+  }
+
+  function pickGoal(g: string) {
+    if (!g.trim()) return setError("Pick one, or write what you need.");
+    setGoal(g.trim());
+    setError(null);
+    setStep(3);
+  }
+
+  async function submit() {
     setBusy(true);
     setError(null);
     // Clips are optional; with them the videos are built on real footage of you and the product.
     const body = new FormData();
     body.set("url", url);
-    body.set("goal", String(form.get("goal") ?? "").trim());
-    form.getAll("files").forEach((f) => f instanceof File && f.size && body.append("files", f));
-    const res = await fetch("/api/jobs", { method: "POST", body });
-    const data = (await res.json()) as { id?: string; error?: string };
-    if (!res.ok || !data.id) {
+    body.set("goal", goal);
+    files.forEach((f) => body.append("files", f));
+    const res = await authFetch("/api/jobs", { method: "POST", body }).catch(() => null);
+    const data = res ? ((await res.json().catch(() => ({}))) as { id?: string; error?: string }) : {};
+    if (!res?.ok || !data.id) {
       setError(data.error ?? "Something went wrong. Try again.");
       setBusy(false);
       return;
@@ -36,52 +56,127 @@ export function LinkForm() {
   }
 
   return (
-    <form onSubmit={submit} className="flex w-full max-w-xl flex-col gap-3">
-      <input
-        name="url"
-        placeholder="yourproduct.com"
-        inputMode="url"
-        autoCapitalize="off"
-        autoCorrect="off"
-        className="h-14 rounded-2xl border border-black/10 bg-white px-5 text-lg text-black outline-none focus:border-black/40"
-      />
-      <p className="mt-2 text-left text-sm font-semibold text-black/50">What do you need?</p>
-      <div className="flex flex-wrap gap-2">
-        {GOALS.map((g) => (
-          <button
-            key={g}
-            type="button"
-            onClick={() => setGoal(g)}
-            className={`rounded-full px-4 py-2 text-sm font-semibold ${
-              goal === g ? "bg-black text-white" : "border border-black/15 bg-white text-black"
-            }`}
-          >
-            {g}
+    <div className="flex w-full max-w-xl flex-col gap-5">
+      <div className="flex items-center justify-between">
+        {step > 1 ? (
+          <button type="button" onClick={() => (setError(null), setStep((s) => (s - 1) as 1 | 2))} className="text-sm font-semibold text-black/50">
+            ← Back
           </button>
-        ))}
-      </div>
-      <input
-        name="goal"
-        value={goal}
-        onChange={(e) => setGoal(e.target.value)}
-        placeholder="Or write your own"
-        className="h-12 rounded-2xl border border-black/10 bg-white px-5 text-black outline-none focus:border-black/40"
-      />
-      <label className="mt-2 flex cursor-pointer flex-col gap-1 rounded-2xl border border-dashed border-black/20 bg-white px-5 py-4 text-left">
-        <span className="font-semibold text-black">Add anything you have (optional, makes the videos far better)</span>
-        <span className="text-sm text-black/55">
-          A clip of you talking about it, screen recordings, product photos, past videos. Up to 10. Got nothing? Film 30 seconds on your phone: who it&apos;s for, what it does, why you built it.
+        ) : (
+          <span />
+        )}
+        <span className="flex gap-1.5" aria-label={`Step ${step} of 3`}>
+          {[1, 2, 3].map((n) => (
+            <span key={n} className={`h-1.5 w-6 rounded-full ${n <= step ? "bg-black" : "bg-black/15"}`} />
+          ))}
         </span>
-        <input name="files" type="file" accept="video/*,image/*" multiple className="mt-1 text-sm text-black/70" />
-      </label>
-      <button
-        type="submit"
-        disabled={busy}
-        className="mt-2 h-14 rounded-2xl bg-black px-7 text-lg font-semibold text-white disabled:opacity-60"
-      >
-        {busy ? "Uploading..." : "Get me customers"}
-      </button>
+      </div>
+
+      {step === 1 ? (
+        <form onSubmit={nextFromUrl} className="flex flex-col gap-4">
+          <h1 className="text-3xl font-bold tracking-tight sm:text-4xl">What are we getting customers for?</h1>
+          <input
+            ref={urlBox}
+            defaultValue={url}
+            autoFocus
+            placeholder="yourproduct.com"
+            inputMode="url"
+            autoCapitalize="off"
+            autoCorrect="off"
+            className="h-14 rounded-2xl border border-black/10 bg-white px-5 text-lg text-black outline-none focus:border-black/40"
+          />
+          <button type="submit" className="h-14 rounded-2xl bg-black text-lg font-semibold text-white">
+            Next
+          </button>
+        </form>
+      ) : null}
+
+      {step === 2 ? (
+        <form
+          onSubmit={(e) => {
+            e.preventDefault();
+            pickGoal(goalBox.current?.value ?? "");
+          }}
+          className="flex flex-col gap-4"
+        >
+          <h1 className="text-3xl font-bold tracking-tight sm:text-4xl">What do you need?</h1>
+          <p className="-mt-2 text-black/50">{url.replace(/^https?:\/\//, "")}</p>
+          <div className="flex flex-col gap-2">
+            {GOALS.map((g) => (
+              <button
+                key={g}
+                type="button"
+                onClick={() => pickGoal(g)}
+                className={`h-14 rounded-2xl px-5 text-left text-lg font-semibold ${
+                  goal === g ? "bg-black text-white" : "border border-black/10 bg-white text-black hover:border-black/40"
+                }`}
+              >
+                {g}
+              </button>
+            ))}
+          </div>
+          <div className="flex gap-2">
+            <input
+              ref={goalBox}
+              defaultValue={GOALS.includes(goal) ? "" : goal}
+              placeholder="Something else"
+              className="h-14 min-w-0 flex-1 rounded-2xl border border-black/10 bg-white px-5 text-lg text-black outline-none focus:border-black/40"
+            />
+            <button type="submit" className="h-14 rounded-2xl bg-black px-6 font-semibold text-white">
+              Next
+            </button>
+          </div>
+        </form>
+      ) : null}
+
+      {step === 3 ? (
+        <div className="flex flex-col gap-4">
+          <h1 className="text-3xl font-bold tracking-tight sm:text-4xl">Got any clips or photos?</h1>
+          <p className="-mt-2 text-black/50">Optional, but the videos get far better with them.</p>
+          <label className="flex cursor-pointer flex-col items-center gap-1 rounded-2xl border border-dashed border-black/25 bg-white px-5 py-8 text-center hover:border-black/50">
+            <span className="text-lg font-semibold">{files.length ? "Add more" : "Choose files"}</span>
+            <span className="text-sm text-black/55">
+              A clip of you talking about it, screen recordings, product photos, past videos. Up to {MAX_FILES}.
+            </span>
+            <input
+              type="file"
+              accept="video/*,image/*"
+              multiple
+              className="hidden"
+              onChange={(e) => {
+                const picked = Array.from(e.target.files ?? []).filter((f) => f.size > 0);
+                setFiles((cur) => [...cur, ...picked].slice(0, MAX_FILES));
+                e.target.value = "";
+              }}
+            />
+          </label>
+          {files.length ? (
+            <ul className="flex flex-col gap-2 text-left">
+              {files.map((f, i) => (
+                <li key={`${f.name}-${i}`} className="flex items-center justify-between gap-3 rounded-2xl bg-white px-4 py-3 text-sm">
+                  <span className="min-w-0 truncate">{f.name}</span>
+                  <button type="button" onClick={() => setFiles((cur) => cur.filter((_, k) => k !== i))} className="shrink-0 font-semibold text-black/50">
+                    Remove
+                  </button>
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <p className="text-sm text-black/45">Got nothing? Film 30 seconds on your phone: who it&apos;s for, what it does, why you built it.</p>
+          )}
+          <button
+            type="button"
+            onClick={() => void submit()}
+            disabled={busy}
+            className="h-14 rounded-2xl bg-black text-lg font-semibold text-white disabled:opacity-60"
+          >
+            {busy ? (files.length ? "Uploading..." : "Starting...") : "Get me customers"}
+          </button>
+          {!files.length ? <p className="-mt-2 text-sm text-black/45">No files? That&apos;s fine, we&apos;ll use your website.</p> : null}
+        </div>
+      ) : null}
+
       {error ? <p className="text-red-600">{error}</p> : null}
-    </form>
+    </div>
   );
 }

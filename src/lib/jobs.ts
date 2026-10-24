@@ -1,4 +1,4 @@
-import { mkdir, readFile, writeFile, rename } from "node:fs/promises";
+import { mkdir, readFile, readdir, writeFile, rename } from "node:fs/promises";
 import { randomUUID } from "node:crypto";
 import path from "node:path";
 import type { VideoProps } from "@/remotion/schema";
@@ -23,6 +23,7 @@ export type Job = {
   createdAt: string;
   url: string;
   goal: string; // what they asked for, e.g. "I need my first 50 users"
+  owner?: { uid: string; email: string; name: string }; // who ran it (Google sign in)
   step: JobStep;
   error?: string;
   research?: Research;
@@ -38,8 +39,8 @@ export type Job = {
 export const jobDir = (id: string) => path.join(DATA_DIR, id);
 export const fileUrl = (id: string, name: string) => `/api/files/${id}/${name}`;
 
-export async function createJob(url: string, goal: string): Promise<Job> {
-  const job: Job = { id: randomUUID().slice(0, 8), createdAt: new Date().toISOString(), url, goal, step: "queued", videos: [] };
+export async function createJob(url: string, goal: string, owner: Job["owner"]): Promise<Job> {
+  const job: Job = { id: randomUUID().slice(0, 8), createdAt: new Date().toISOString(), url, goal, owner, step: "queued", videos: [] };
   await mkdir(jobDir(job.id), { recursive: true });
   await saveJob(job);
   return job;
@@ -78,4 +79,11 @@ export function updateJob(id: string, change: (job: Job) => void): Promise<Job> 
   queues.set(id, run);
   void run.finally(() => queues.get(id) === run && queues.delete(id)).catch(() => {});
   return run;
+}
+
+// Every job, newest first. Fine for an event's worth of jobs; a DB later.
+export async function listJobs(): Promise<Job[]> {
+  const ids = await readdir(DATA_DIR).catch(() => [] as string[]);
+  const jobs = (await Promise.all(ids.map(getJob))).filter((j): j is Job => !!j);
+  return jobs.sort((a, b) => b.createdAt.localeCompare(a.createdAt));
 }

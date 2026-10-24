@@ -2,6 +2,7 @@ import { after } from "next/server";
 import { writeFile } from "node:fs/promises";
 import path from "node:path";
 import { createJob, jobDir } from "@/lib/jobs";
+import { getUser, recordUser } from "@/lib/auth";
 import { runJob } from "@/lib/pipeline";
 
 export const maxDuration = 300;
@@ -11,6 +12,10 @@ const MAX_UPLOAD = 300_000_000; // phone clips get big
 // JSON ({url, goal}) or a form with optional "files": photos, screen recordings, past
 // videos (up to 10). The pipeline sorts out what each one is.
 export async function POST(request: Request) {
+  const user = await getUser(request);
+  if (!user) return Response.json({ error: "Sign in with Google first." }, { status: 401 });
+  void recordUser(user).catch(() => {});
+
   let url: string | undefined;
   let goal: string | undefined;
   const clips: { name: string; file: File }[] = [];
@@ -38,7 +43,11 @@ export async function POST(request: Request) {
     return Response.json({ error: "Add photos or videos only." }, { status: 400 });
   }
 
-  const job = await createJob(url, goal?.trim().slice(0, 200) || "I need my first 50 users");
+  const job = await createJob(url, goal?.trim().slice(0, 200) || "I need my first 50 users", {
+    uid: user.uid,
+    email: user.email,
+    name: user.name,
+  });
   for (const c of clips) {
     const ext = (path.extname(c.file.name) || ".mp4").toLowerCase().replace(/[^.a-z0-9]/g, "");
     await writeFile(path.join(jobDir(job.id), `upload-${c.name}${ext}`), Buffer.from(await c.file.arrayBuffer()));
