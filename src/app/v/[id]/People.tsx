@@ -63,7 +63,7 @@ function PersonCard({ person }: { person: Person }) {
         <textarea
           value={reply}
           onChange={(e) => setReply(e.target.value)}
-          rows={5}
+          rows={7}
           className="rounded-2xl border border-black/15 p-3 text-base font-normal"
         />
       </label>

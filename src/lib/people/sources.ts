@@ -49,7 +49,7 @@ export async function reddit(subreddits: string[], terms: string[]): Promise<Can
 
 // Google, through Gemini's search tool. Links come only from grounding metadata:
 // URLs the model writes in its own text are often invented.
-const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY, httpOptions: { timeout: 40_000 } });
+const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY, httpOptions: { timeout: 60_000 } });
 const after = (days: number) => `after:${new Date(Date.now() - days * DAY * 1000).toISOString().slice(0, 10)}`;
 
 async function google(queries: string[]): Promise<{ url: string; snippet: string }[]> {
